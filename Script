@@ -2797,7 +2797,7 @@ wmGui.DisplayOrder = 0
 wmGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 wmGui.Parent = LP:WaitForChild("PlayerGui")
 local watermark = Instance.new("Frame")
-watermark.Size = UDim2.fromOffset(196, 28)
+watermark.Size = UDim2.fromOffset(228, 28)
 watermark.Position = UDim2.fromOffset(10, 6)
 watermark.BorderSizePixel = 0
 watermark.ZIndex = 2
@@ -2807,10 +2807,18 @@ track(watermark, "bg", "main")
 corner(watermark, 4)
 addStroke(watermark, 1.25)
 local wmText = textOf(watermark, "Kicia Enhancements", "accent", 14, true)
-wmText.Size = UDim2.new(1, -16, 1, 0)
+wmText.Size = UDim2.new(1, -36, 1, 0)
 wmText.Position = UDim2.fromOffset(8, 0)
 wmText.TextXAlignment = Enum.TextXAlignment.Left
 wmText.ZIndex = 3
+local wmLogo = Instance.new("ImageLabel")
+wmLogo.BackgroundTransparency = 1
+wmLogo.Image = "rbxassetid://121679872034627"
+wmLogo.ScaleType = Enum.ScaleType.Fit
+wmLogo.Size = UDim2.fromOffset(20, 20)
+wmLogo.Position = UDim2.new(1, -24, 0.5, -10)
+wmLogo.ZIndex = 4
+wmLogo.Parent = watermark
 
 local activeFrame = Instance.new("Frame")
 activeFrame.Size = UDim2.fromOffset(210, 0)
@@ -4800,7 +4808,7 @@ local function fileExists(path)
 end
 
 local function seedBundled()
-	for _, name in ipairs({ "KE", "Closet", "Rage", "Midnight", "Toxic", "Ice", "Amber", "Mono", "Violet", "Blood" }) do
+	for _, name in ipairs({ "KE", "Closet", "Dusk", "Rage", "Midnight", "Toxic", "Ice", "Amber", "Mono", "Violet", "Blood" }) do
 		local old = THEMES_DIR .. "/[COMMUNITY] " .. name .. ".json"
 		local new = THEMES_DIR .. "/" .. name .. ".json"
 		if fileExists(old) then
@@ -4810,6 +4818,20 @@ local function seedBundled()
 				end)
 			end
 			removeFile(old)
+		end
+	end
+	do
+		local oldCloset = THEMES_DIR .. "/Closet.json"
+		local dusk = THEMES_DIR .. "/Dusk.json"
+		if fileExists(oldCloset) then
+			removeFile(oldCloset)
+		end
+		if not fileExists(dusk) then
+			pcall(writefile, dusk, [[{"background":{"R":0.03922,"G":0.04706,"B":0.07059,"T":0.000},"main":{"R":0.07059,"G":0.08627,"B":0.13333,"T":0.000},"outline":{"R":0.47059,"G":0.58824,"B":0.82353,"T":0.000},"font":{"R":0.88627,"G":0.90980,"B":0.94902,"T":0.000},"accent":{"R":0.58824,"G":0.72941,"B":1.00000,"T":0.000}}]])
+		end
+		if PREFS.autoTheme == "Closet" then
+			PREFS.autoTheme = "Dusk"
+			savePreferences()
 		end
 	end
 	if PREFS.bundledSeeded then
@@ -4833,7 +4855,7 @@ local function seedBundled()
 	end
 	local themes = {
 		{ "KE", theme(C(8, 8, 10), C(18, 16, 22), C(232, 140, 188), C(236, 232, 238), C(232, 120, 176)) },
-		{ "Closet", theme(C(12, 10, 14), C(28, 22, 30), C(168, 120, 150), C(230, 220, 226), C(196, 130, 168)) },
+		{ "Dusk", theme(C(10, 12, 18), C(18, 22, 34), C(120, 150, 210), C(226, 232, 242), C(150, 186, 255)) },
 		{ "Rage", theme(C(8, 6, 6), C(22, 12, 12), C(180, 40, 40), C(240, 230, 230), C(220, 48, 48)) },
 		{ "Midnight", theme(C(6, 8, 14), C(14, 18, 32), C(90, 130, 210), C(226, 232, 242), C(96, 150, 255)) },
 		{ "Toxic", theme(C(6, 10, 7), C(12, 22, 14), C(70, 180, 80), C(226, 240, 228), C(90, 220, 100)) },
