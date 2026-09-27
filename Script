@@ -6038,7 +6038,3 @@ end
 startRuntime()
 
 notify("Kicia Enhancements", "Loaded. Menu is hidden. Press " .. prettyKey(PREFS.menuKey) .. ".", "accent")
-print("hi lol :)")
-print("enjoy ke!")'
-print("join our community discord server!")
-print("link is in settings tab under community)
