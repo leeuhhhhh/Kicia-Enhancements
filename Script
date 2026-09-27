@@ -4064,7 +4064,12 @@ local function buildCombatPage()
 	makeBind(aim, o, "Bind", function() return CFG.aimbotBind end, function(v) CFG.aimbotBind = v end)
 	makeCycle(aim, o, "Mode", { "Hold", "Toggle" }, function() return CFG.aimbotMode end, function(v) CFG.aimbotMode = v end)
 	makeCycle(aim, o, "Aim Point", { "Head", "Torso" }, function() return CFG.aimPoint end, function(v) CFG.aimPoint = v end)
-	makeCycle(aim, o, "Style", { "Linear", "Spring", "Lock" }, function() return CFG.aimbotStyle end, function(v) CFG.aimbotStyle = v end)
+	makeCycle(aim, o, "Style", { "Linear", "Spring", "Lock" }, function() return CFG.aimbotStyle end, function(v)
+		CFG.aimbotStyle = v
+		if v == "Lock" then
+			notify("Aimbot", "EXTREMELY BLATANT, 1 REPORT AND UR GONE", "danger")
+		end
+	end)
 	makeSlider(aim, o, "Smoothing", 1, 100, function() return CFG.smoothing end, function(v) CFG.smoothing = v end, "%")
 	makeSlider(aim, o, "Switch Delay", 0, 300, function() return CFG.switchDelay end, function(v) CFG.switchDelay = v end, "ms")
 	makeToggle(aim, o, "Visible Check", function() return CFG.visibleCheck end, function(v) CFG.visibleCheck = v end)
