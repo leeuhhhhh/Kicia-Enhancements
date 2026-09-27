@@ -3053,9 +3053,9 @@ local function buildIcon(parent, kind)
 		return l
 	end
 	if kind == "combat" then
-		bar(13, 8, 11, 3, 1)
-		bar(8, 11, 8, 4, 1)
-		bar(7, 16, 3, 6, 1)
+		bar(7, 15, 5, 8, 1)
+		bar(12, 10, 14, 5, 1)
+		bar(16, 7, 8, 3, 1)
 	elseif kind == "rage" then
 		outline(11, 13, 13, 11, 3)
 		bar(11, 5, 2, 4, 1)
@@ -3070,16 +3070,16 @@ local function buildIcon(parent, kind)
 		bar(15, 9, 4, 4, 2)
 		bar(15, 16, 6, 4, 2)
 	elseif kind == "world" then
-		outline(11, 11, 14, 14, 7)
-		bar(11, 11, 12, 2, 1)
-		bar(11, 11, 2, 12, 1)
+		outline(11, 11, 15, 15, 8)
+		bar(11, 8, 9, 2, 1)
+		bar(11, 11, 13, 2, 1)
+		bar(11, 14, 9, 2, 1)
 	elseif kind == "spoof" then
 		outline(11, 12, 14, 11, 5)
 		bar(8, 12, 3, 3, 2)
 		bar(14, 12, 3, 3, 2)
 	elseif kind == "check" then
-		bar(8, 13, 2, 6, 1, 42)
-		bar(13, 10, 2, 10, 1, -46)
+		glyph("✓")
 	elseif kind == "keys" then
 		outline(11, 11, 14, 14, 3)
 		glyph("F")
@@ -4334,63 +4334,38 @@ local function buildKeybindsPage()
 end
 
 local function buildWhitelistPage()
-	local page = pages.Whitelist
-	local left = Instance.new("Frame")
-	left.BackgroundTransparency = 1
-	left.Size = UDim2.new(0.56, -4, 1, 0)
-	left.ZIndex = 53
-	left.Parent = page
-	local right = Instance.new("Frame")
-	right.Size = UDim2.new(0.44, -4, 1, 0)
-	right.Position = UDim2.new(0.56, 8, 0, 0)
-	right.BorderSizePixel = 0
-	right.ZIndex = 53
-	right.Parent = page
-	track(right, "bg", "main")
-	corner(right, 4)
-	addStroke(right, 1.5)
-	local rh = textOf(right, "Whitelisted", "accent", 14, true)
-	rh.Position = UDim2.fromOffset(12, 10)
-	rh.Size = UDim2.new(1, -24, 0, 18)
-	rh.ZIndex = 54
-	local names = Instance.new("ScrollingFrame")
+	local sc, ord = vscroll(pages.Whitelist)
+	local players, op = card(sc, ord, "Players")
+	local listed, ol = card(sc, ord, "Whitelisted")
+
+	local names = Instance.new("Frame")
 	names.BackgroundTransparency = 1
-	names.Position = UDim2.fromOffset(12, 36)
-	names.Size = UDim2.new(1, -24, 1, -48)
-	names.BorderSizePixel = 0
-	names.ScrollBarThickness = 0
-	names.ScrollingDirection = Enum.ScrollingDirection.Y
-	names.CanvasSize = UDim2.new()
-	names.AutomaticCanvasSize = Enum.AutomaticSize.Y
-	names.ZIndex = 54
-	names.Parent = right
+	names.Size = UDim2.new(1, 0, 0, 18)
+	names.AutomaticSize = Enum.AutomaticSize.Y
+	names.LayoutOrder = ol()
+	names.ZIndex = 56
+	names.Parent = listed
 	local namesLay = Instance.new("UIListLayout")
 	namesLay.SortOrder = Enum.SortOrder.LayoutOrder
 	namesLay.Padding = UDim.new(0, 4)
 	namesLay.Parent = names
 	local empty = textOf(names, "Nobody is whitelisted.", "muted", 12, false)
-	empty.Size = UDim2.new(1, 0, 0, 32)
-	empty.TextWrapped = true
+	empty.Size = UDim2.new(1, 0, 0, 18)
+	empty.LayoutOrder = 0
 	empty.TextTruncate = Enum.TextTruncate.None
-	empty.ZIndex = 55
+	empty.ZIndex = 57
 
-	local sc = Instance.new("ScrollingFrame")
-	sc.Size = UDim2.fromScale(1, 1)
-	sc.BackgroundTransparency = 1
-	sc.BorderSizePixel = 0
-	sc.ScrollBarThickness = 0
-	sc.ScrollingDirection = Enum.ScrollingDirection.Y
-	sc.CanvasSize = UDim2.new()
-	sc.AutomaticCanvasSize = Enum.AutomaticSize.Y
-	sc.ZIndex = 53
-	sc.Parent = left
+	local list = Instance.new("Frame")
+	list.BackgroundTransparency = 1
+	list.Size = UDim2.new(1, 0, 0, 0)
+	list.AutomaticSize = Enum.AutomaticSize.Y
+	list.LayoutOrder = op()
+	list.ZIndex = 56
+	list.Parent = players
 	local lay = Instance.new("UIListLayout")
 	lay.SortOrder = Enum.SortOrder.LayoutOrder
-	lay.Padding = UDim.new(0, 6)
-	lay.Parent = sc
-	lay:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-		sc.CanvasSize = UDim2.new(0, 0, 0, lay.AbsoluteContentSize.Y + 8)
-	end)
+	lay.Padding = UDim.new(0, 4)
+	lay.Parent = list
 
 	local function playerLabel(plr)
 		local ok, text = pcall(function()
@@ -4402,10 +4377,10 @@ local function buildWhitelistPage()
 	end
 
 	rebuildWhitelist = function()
-		if not sc.Parent then
+		if not list.Parent then
 			return
 		end
-		for _, c in ipairs(sc:GetChildren()) do
+		for _, c in ipairs(list:GetChildren()) do
 			if c:IsA("Frame") then
 				c:Destroy()
 			end
@@ -4449,7 +4424,7 @@ local function buildWhitelistPage()
 				row.LayoutOrder = i
 				row.BorderSizePixel = 0
 				row.ZIndex = 54
-				row.Parent = sc
+				row.Parent = list
 				track(row, "bg", "main")
 				corner(row, 8)
 				addStroke(row, 1.25)
@@ -4482,11 +4457,7 @@ local function buildWhitelistPage()
 				end)
 			end
 		end
-		task.defer(function()
-			if sc.Parent then
-				sc.CanvasSize = UDim2.new(0, 0, 0, lay.AbsoluteContentSize.Y + 12)
-			end
-		end)
+		task.defer(syncCards)
 		repaint()
 	end
 end
@@ -5965,3 +5936,5 @@ end
 startRuntime()
 
 notify("Kicia Enhancements", "Loaded. Menu is hidden. Press " .. prettyKey(PREFS.menuKey) .. ".", "accent")
+print("hi lol :)")
+print("enjoy ke!")
