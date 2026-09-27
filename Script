@@ -1,1 +1,5967 @@
-placeholder
+-- Kicia Enhancements
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
+
+local LP = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local LICENSE_API = "http://127.0.0.1:5000/check"
+
+local function keHwid()
+	local raw = ""
+	pcall(function()
+		if typeof(gethwid) == "function" then
+			raw = tostring(gethwid())
+		end
+	end)
+	if raw == "" or raw == "nil" then
+		pcall(function()
+			raw = tostring(game:GetService("RbxAnalyticsService"):GetClientId())
+		end)
+	end
+	if not raw or raw == "" or raw == "nil" then
+		raw = "unknown"
+	end
+	return raw
+end
+
+local function keLicense()
+	local key = ""
+	pcall(function()
+		if typeof(script_key) == "string" then
+			key = script_key
+		end
+	end)
+	pcall(function()
+		if key == "" and typeof(getgenv) == "function" then
+			local g = getgenv().script_key
+			if typeof(g) == "string" then
+				key = g
+			end
+		end
+	end)
+	if key == "" or key == "{KEY}" or key == "Placeholder" then
+		return true
+	end
+	local req = (typeof(request) == "function" and request)
+		or (typeof(http_request) == "function" and http_request)
+		or (typeof(syn) == "table" and syn.request)
+	if typeof(req) ~= "function" then
+		warn("[KE] This executor cannot send the license check.")
+		return false
+	end
+	local ok, res = pcall(function()
+		return req({
+			Url = LICENSE_API,
+			Method = "POST",
+			Headers = { ["Content-Type"] = "application/json" },
+			Body = HttpService:JSONEncode({ key = key, hwid = keHwid() }),
+		})
+	end)
+	if not ok or type(res) ~= "table" or type(res.Body) ~= "string" then
+		warn("[KE] Could not reach the license server.")
+		return false
+	end
+	local decoded
+	pcall(function()
+		decoded = HttpService:JSONDecode(res.Body)
+	end)
+	if type(decoded) ~= "table" or not decoded.valid then
+		warn("[KE] License denied: " .. tostring(decoded and decoded.reason or res.StatusCode or "unknown"))
+		return false
+	end
+	return true
+end
+
+if not keLicense() then
+	return
+end
+
+local FIXED = {
+	danger = Color3.fromRGB(164, 46, 60),
+	success = Color3.fromRGB(32, 138, 88),
+	warning = Color3.fromRGB(186, 124, 42),
+}
+
+local function col(c, t)
+	return { c = c, t = t or 0 }
+end
+
+local THEME = {
+	background = col(Color3.fromRGB(8, 8, 10), 0),
+	main = col(Color3.fromRGB(14, 14, 18), 0),
+	outline = col(Color3.fromRGB(255, 176, 224), 0.15),
+	font = col(Color3.fromRGB(236, 236, 242), 0),
+	accent = col(Color3.fromRGB(255, 170, 226), 0),
+}
+
+local CFG = {
+	teamCheck = true,
+	healthCheck = true,
+	espBox = false,
+	espType = "2D",
+	espFill = false,
+	espDistance = false,
+	espName = false,
+	espNameMode = "Display",
+	espHealth = false,
+	espHealthMode = "Bar",
+	aimbot = false,
+	aimbotBind = "Z",
+	aimbotMode = "Hold",
+	aimbotHeld = false,
+	switchDelay = 0,
+	smoothing = 100,
+	visibleCheck = true,
+	aimPoint = "Head",
+	aimbotStyle = "Linear",
+	fovOn = false,
+	fovRadius = 347,
+	trigger = false,
+	triggerBind = "Z",
+	triggerMode = "Hold",
+	triggerHeld = false,
+	triggerDelay = 0,
+	voidActive = false,
+	orbitActive = false,
+	evasionActive = false,
+	translocate = false,
+	translocateDepth = 3,
+	orbitAboveTime = 0.5,
+	translocateUnderTime = 0.5,
+	transVoidHideTime = 1.0,
+	voidMinRange = 8000,
+	voidMaxRange = 10000,
+	voidHideTime = 1.0,
+	orbitShowTime = 0.5,
+	orbitSpeed = 1.0,
+	orbitDist = 2,
+	orbitMinY = 10,
+	orbitMaxY = 10,
+	evasionMinDist = 80,
+	evasionMaxDist = 280,
+	priorityUserId = nil,
+	ignoreDistance = 0,
+	rageSilent = false,
+	noclip = false,
+	speedwalk = false,
+	speedValue = 32,
+	flight = false,
+	flightSpeed = 50,
+	antiAim = false,
+	customAnimEnabled = false,
+	customAnimName = "Bodybuilder",
+	animSpeed = 1,
+	doubleJumpMult = 1,
+	slideMult = 1,
+	infDoubleJump = false,
+	usernameSpoof = false,
+	spoofSelfName = "",
+	spoofEnemyName = "",
+	worldEnabled = false,
+	worldSky = "Default",
+	worldClock = 14,
+	worldBrightness = 2,
+	worldFogStart = 0,
+	worldFogEnd = 100000,
+	worldSaturation = 0,
+	worldContrast = 0,
+}
+
+local PREFS = {
+	notifications = true,
+	activeMenu = true,
+	watermark = true,
+	menuKey = "RightControl",
+	autoConfig = "",
+	autoTheme = "",
+	uiFont = "Gotham",
+	uiBold = false,
+	uiItalic = false,
+	uiSize = 13,
+	discordPrompted = false,
+}
+
+local SKIP_CFG = {
+	aimbotHeld = true,
+	triggerHeld = true,
+}
+
+local whitelist = {}
+local killed = false
+local uiOpen = false
+local listening = false
+local char, hrp, hum
+local baseSpeed = 16
+local collideState = {}
+local emoteTrack = nil
+local emoteAnim = nil
+local resolvedAnims = {}
+local aimCircle = nil
+local selectedConfig = ""
+local selectedTheme = ""
+local gui
+
+local EMOTES = {
+	{ name = "Bodybuilder", id = "107696500195440" },
+	{ name = "Floss", id = "5917570207" },
+	{ name = "Hyper Circle Scootin'", id = "91322242642672" },
+	{ name = "Dolphin", id = "5938365243" },
+	{ name = "Breakdance", id = "114115290521271" },
+	{ name = "Fish", id = "133142324349281" },
+	{ name = "Human Gun", id = "73562814360939" },
+	{ name = "Hype", id = "92440836933249" },
+	{ name = "Line Dance", id = "4049646104" },
+	{ name = "Admiring", id = "115687732623271" },
+	{ name = "Reckless Driving", id = "125441137075991" },
+	{ name = "Jenga", id = "138862875245908" },
+	{ name = "Cha Cha", id = "73299241817756" },
+	{ name = "T-Pose", id = "139165177318950" },
+	{ name = "Worm", id = "81926730031709" },
+	{ name = "Vortex", id = "125227030835962" },
+	{ name = "Take The L", id = "133139819277127" },
+	{ name = "Take Me Under", id = "6797938823" },
+	{ name = "Popular", id = "71302743123422" },
+	{ name = "Aura", id = "76361248833307" },
+	{ name = "Zesty Sturdy", id = "104278650550369" },
+	{ name = "Fake Lag", id = "97523498583729" },
+}
+local EMOTES_BY_NAME = {}
+local EMOTE_NAMES = {}
+for _, e in ipairs(EMOTES) do
+	EMOTES_BY_NAME[e.name] = e.id
+	EMOTE_NAMES[#EMOTE_NAMES + 1] = e.name
+end
+
+local NAV = {
+	{ "Combat", "combat" },
+	{ "Ragebot", "rage" },
+	{ "ESP", "esp" },
+	{ "Player", "player" },
+	{ "World", "world" },
+	{ "Spoofer", "spoof" },
+	{ "Keybinds", "keys" },
+	{ "Whitelist", "check" },
+	{ "Settings", "gear" },
+}
+
+local COLLAPSED_W = 58
+local EXPANDED_W = 220
+
+-- ====================== FILES ======================
+local ROOT = "Kicia Enhancements"
+local RIVALS = ROOT .. "/RIVALS"
+local CONFIGS_DIR = RIVALS .. "/Configs"
+local THEMES_DIR = RIVALS .. "/Themes"
+local PREFS_PATH = RIVALS .. "/Preferences.json"
+
+local function ensureFolder(path)
+	pcall(function()
+		if isfolder and not isfolder(path) then
+			makefolder(path)
+		end
+	end)
+end
+ensureFolder(ROOT)
+ensureFolder(RIVALS)
+ensureFolder(CONFIGS_DIR)
+ensureFolder(THEMES_DIR)
+
+local function listJson(dir)
+	local out = {}
+	pcall(function()
+		if not listfiles then
+			return
+		end
+		for _, f in ipairs(listfiles(dir)) do
+			local s = tostring(f)
+			if s:lower():sub(-5) == ".json" then
+				out[#out + 1] = s:match("([^/\\]+)%.json$") or s
+			end
+		end
+	end)
+	table.sort(out)
+	return out
+end
+
+local function writeJson(path, data)
+	return pcall(function()
+		writefile(path, HttpService:JSONEncode(data))
+	end)
+end
+
+local function readJson(path)
+	local ok, data = pcall(function()
+		return HttpService:JSONDecode(readfile(path))
+	end)
+	if ok and type(data) == "table" then
+		return data
+	end
+	return nil
+end
+
+local function removeFile(path)
+	pcall(function()
+		if delfile then
+			delfile(path)
+		end
+	end)
+end
+
+local function cleanKeyName(v)
+	if type(v) ~= "string" then
+		return nil
+	end
+	v = v:gsub("^Enum%.KeyCode%.", ""):gsub("^Enum%.UserInputType%.", "")
+	if v == "" then
+		return nil
+	end
+	return v
+end
+
+local function savePreferences()
+	writeJson(PREFS_PATH, {
+		notifications = PREFS.notifications,
+		activeMenu = PREFS.activeMenu,
+		watermark = PREFS.watermark,
+		menuKey = PREFS.menuKey,
+		autoConfig = PREFS.autoConfig,
+		autoTheme = PREFS.autoTheme,
+		uiFont = PREFS.uiFont,
+		uiBold = PREFS.uiBold,
+		uiItalic = PREFS.uiItalic,
+		uiSize = PREFS.uiSize,
+		discordPrompted = PREFS.discordPrompted == true,
+	})
+end
+
+local function loadPreferences()
+	local data = readJson(PREFS_PATH)
+	if not data then
+		return
+	end
+	if type(data.notifications) == "boolean" then
+		PREFS.notifications = data.notifications
+	end
+	if type(data.activeMenu) == "boolean" then
+		PREFS.activeMenu = data.activeMenu
+	end
+	if type(data.watermark) == "boolean" then
+		PREFS.watermark = data.watermark
+	end
+	local key = cleanKeyName(data.menuKey)
+	if key and Enum.KeyCode[key] then
+		PREFS.menuKey = key
+	end
+	if type(data.autoConfig) == "string" then
+		PREFS.autoConfig = data.autoConfig
+	end
+	if type(data.autoTheme) == "string" then
+		PREFS.autoTheme = data.autoTheme
+	end
+	if type(data.uiFont) == "string" and data.uiFont ~= "" then
+		PREFS.uiFont = data.uiFont
+	end
+	if type(data.uiBold) == "boolean" then
+		PREFS.uiBold = data.uiBold
+	end
+	if type(data.uiItalic) == "boolean" then
+		PREFS.uiItalic = data.uiItalic
+	end
+	if type(data.uiSize) == "number" then
+		PREFS.uiSize = math.clamp(data.uiSize, 11, 18)
+	end
+	if data.discordPrompted == true then
+		PREFS.discordPrompted = true
+	end
+end
+
+local DISCORD_URL = "https://discord.gg/6wUaBwBzqj"
+
+local function openLink(url)
+	local opened = false
+	local function try(fn)
+		if opened then
+			return
+		end
+		local ok = pcall(fn)
+		if ok then
+			opened = true
+		end
+	end
+	try(function()
+		if type(openurl) == "function" then
+			openurl(url)
+		else
+			error("no openurl")
+		end
+	end)
+	try(function()
+		if type(open_url) == "function" then
+			open_url(url)
+		else
+			error("no open_url")
+		end
+	end)
+	try(function()
+		if syn and type(syn.open_url) == "function" then
+			syn.open_url(url)
+		else
+			error("no syn")
+		end
+	end)
+	try(function()
+		game:GetService("GuiService"):OpenBrowserWindow(url)
+	end)
+	if opened then
+		return true
+	end
+	if type(setclipboard) == "function" then
+		pcall(setclipboard, url)
+		return false
+	end
+	return false
+end
+
+local function packTheme()
+	local data = {}
+	for _, k in ipairs({ "background", "main", "outline", "font", "accent" }) do
+		local e = THEME[k]
+		data[k] = { R = e.c.R, G = e.c.G, B = e.c.B, T = e.t or 0 }
+	end
+	return data
+end
+
+local function applyThemeData(data)
+	if type(data) ~= "table" then
+		return false
+	end
+	for _, k in ipairs({ "background", "main", "outline", "font", "accent" }) do
+		local v = data[k]
+		if type(v) == "table" and type(v.R) == "number" then
+			THEME[k] = col(Color3.new(v.R, v.G or 0, v.B or 0), tonumber(v.T) or 0)
+		end
+	end
+	return true
+end
+
+local function packConfig()
+	local data = {}
+	for k, v in pairs(CFG) do
+		if not SKIP_CFG[k] and type(v) ~= "function" and typeof(v) ~= "Color3" then
+			data[k] = v
+		end
+	end
+	return data
+end
+
+local function coerceAimbotMode()
+	local function oneOf(v, options, fallback)
+		if table.find(options, v) then
+			return v
+		end
+		return fallback
+	end
+	CFG.aimbotMode = oneOf(CFG.aimbotMode, { "Hold", "Toggle" }, "Hold")
+	CFG.aimbotStyle = oneOf(CFG.aimbotStyle, { "Linear", "Spring", "Lock" }, "Linear")
+	CFG.aimPoint = oneOf(CFG.aimPoint, { "Head", "Torso" }, "Head")
+	CFG.triggerMode = oneOf(CFG.triggerMode, { "Hold", "Toggle", "Always" }, "Hold")
+	CFG.espType = oneOf(CFG.espType, { "2D", "Corner", "3D" }, "2D")
+	CFG.espNameMode = oneOf(CFG.espNameMode, { "Display", "Username" }, "Display")
+	CFG.espHealthMode = oneOf(CFG.espHealthMode, { "Bar", "Text" }, "Bar")
+	if not EMOTES_BY_NAME[CFG.customAnimName] then
+		CFG.customAnimName = EMOTE_NAMES[1]
+	end
+	if type(CFG.spoofSelfName) ~= "string" then
+		CFG.spoofSelfName = ""
+	end
+	if type(CFG.spoofEnemyName) ~= "string" then
+		CFG.spoofEnemyName = ""
+	end
+	CFG.animSpeed = math.clamp(tonumber(CFG.animSpeed) or 1, 0.25, 10)
+	CFG.doubleJumpMult = math.clamp(tonumber(CFG.doubleJumpMult) or 1, 1, 10)
+	CFG.slideMult = math.clamp(tonumber(CFG.slideMult) or 1, 1, 10)
+	CFG.fovRadius = math.clamp(tonumber(CFG.fovRadius) or 347, 20, 800)
+	CFG.smoothing = math.clamp(tonumber(CFG.smoothing) or 100, 1, 100)
+	if type(CFG.infDoubleJump) ~= "boolean" then
+		CFG.infDoubleJump = false
+	end
+end
+
+local function packWhitelist()
+	local data = {}
+	for uid, label in pairs(whitelist) do
+		data[tostring(uid)] = tostring(label)
+	end
+	return data
+end
+
+local function applyWhitelistData(data)
+	if type(data) ~= "table" then
+		return
+	end
+	table.clear(whitelist)
+	for uid, label in pairs(data) do
+		local n = tonumber(uid)
+		if n then
+			whitelist[n] = tostring(label)
+		end
+	end
+end
+
+local function applyConfigData(data)
+	if type(data) ~= "table" then
+		return false
+	end
+	local src = data.cfg or data
+	for k, v in pairs(src) do
+		if CFG[k] ~= nil and not SKIP_CFG[k] and type(v) ~= "table" then
+			if k == "aimbotBind" or k == "triggerBind" then
+				local name = cleanKeyName(tostring(v))
+				if name then
+					CFG[k] = name
+				end
+			elseif k == "priorityUserId" then
+				CFG[k] = tonumber(v)
+			elseif type(CFG[k]) == "number" then
+				CFG[k] = tonumber(v) or CFG[k]
+			elseif type(CFG[k]) == "boolean" then
+				if type(v) == "boolean" then
+					CFG[k] = v
+				end
+			else
+				CFG[k] = v
+			end
+		end
+	end
+	CFG.aimbotHeld = false
+	CFG.triggerHeld = false
+	if type(data.whitelist) == "table" then
+		applyWhitelistData(data.whitelist)
+	end
+	coerceAimbotMode()
+	return true
+end
+
+-- ====================== RUNTIME HELPERS ======================
+local bin = {}
+local function on(signal, fn)
+	local c = signal:Connect(fn)
+	bin[#bin + 1] = c
+	return c
+end
+
+local function applyNoclip(state)
+	if not char then
+		return
+	end
+	if state then
+		for _, p in ipairs(char:GetDescendants()) do
+			if p:IsA("BasePart") then
+				if collideState[p] == nil then
+					collideState[p] = p.CanCollide
+				end
+				p.CanCollide = false
+			end
+		end
+	else
+		for p, prev in pairs(collideState) do
+			if typeof(p) == "Instance" and p.Parent then
+				p.CanCollide = prev
+			end
+		end
+		collideState = {}
+	end
+end
+
+local function stopAnim()
+	if emoteTrack then
+		pcall(function()
+			emoteTrack:Stop(0.05)
+			emoteTrack:Destroy()
+		end)
+		emoteTrack = nil
+	end
+	if emoteAnim then
+		pcall(function()
+			emoteAnim:Destroy()
+		end)
+		emoteAnim = nil
+	end
+end
+
+local function pullAnimId(inst, depth)
+	if depth > 5 or typeof(inst) ~= "Instance" then
+		return nil
+	end
+	if inst:IsA("Animation") then
+		local id = inst.AnimationId
+		if type(id) == "string" and id ~= "" and id ~= "rbxassetid://0" then
+			return id
+		end
+	end
+	local ok, idProp = pcall(function()
+		return inst.AnimationId
+	end)
+	if ok and type(idProp) == "string" and idProp:find("rbxassetid://", 1, true) and idProp ~= "rbxassetid://0" then
+		return idProp
+	end
+	for _, child in ipairs(inst:GetChildren()) do
+		local hit = pullAnimId(child, depth + 1)
+		if hit then
+			return hit
+		end
+	end
+	return nil
+end
+
+local function resolveAnimId(id)
+	local key = tostring(id)
+	if resolvedAnims[key] then
+		return resolvedAnims[key]
+	end
+	local direct = "rbxassetid://" .. key
+	local found = direct
+	local getter = game.GetObjects
+	if type(getter) == "function" then
+		local ok, objs = pcall(getter, game, direct)
+		if ok and type(objs) == "table" then
+			for _, obj in ipairs(objs) do
+				if typeof(obj) == "Instance" then
+					local hit = pullAnimId(obj, 0)
+					pcall(function()
+						obj:Destroy()
+					end)
+					if hit then
+						found = hit
+						break
+					end
+				end
+			end
+		end
+	end
+	resolvedAnims[key] = found
+	return found
+end
+
+local function playSelectedAnim()
+	if not hum or not char or hum.Health <= 0 then
+		return
+	end
+	local id = EMOTES_BY_NAME[CFG.customAnimName]
+	if not id then
+		return
+	end
+	stopAnim()
+	local ok = pcall(function()
+		local anim = Instance.new("Animation")
+		anim.Name = "KE_Emote"
+		anim.AnimationId = resolveAnimId(id)
+		anim.Parent = LP
+		emoteAnim = anim
+		emoteTrack = hum:LoadAnimation(anim)
+		emoteTrack.Priority = Enum.AnimationPriority.Action4
+		emoteTrack.Looped = true
+		emoteTrack:Play(0.05, 1, CFG.animSpeed)
+		emoteTrack:AdjustSpeed(CFG.animSpeed)
+	end)
+	if not ok then
+		stopAnim()
+	end
+end
+
+local emoteRetryAt = 0
+local function keepEmote()
+	if not CFG.customAnimEnabled or not hum or hum.Health <= 0 then
+		return
+	end
+	local speed = CFG.animSpeed
+	if emoteTrack then
+		local ok, playing = pcall(function()
+			return emoteTrack.IsPlaying
+		end)
+		if ok and playing then
+			local curOk, cur = pcall(function()
+				return emoteTrack.Speed
+			end)
+			if curOk and math.abs((cur or speed) - speed) > 0.03 then
+				pcall(function()
+					emoteTrack:AdjustSpeed(speed)
+				end)
+			end
+			return
+		end
+		if tick() - emoteRetryAt < 0.45 then
+			return
+		end
+		emoteRetryAt = tick()
+		local resumed = pcall(function()
+			emoteTrack.Priority = Enum.AnimationPriority.Action4
+			emoteTrack.Looped = true
+			emoteTrack:Play(0.05, 1, speed)
+			emoteTrack:AdjustSpeed(speed)
+		end)
+		if resumed then
+			return
+		end
+		emoteTrack = nil
+	end
+	if tick() - emoteRetryAt < 0.45 then
+		return
+	end
+	emoteRetryAt = tick()
+	playSelectedAnim()
+end
+
+local airJumps = 0
+local slideHeld = false
+local slideBase = nil
+
+local function jumpVelocity()
+	if not hum then
+		return 50
+	end
+	if hum.UseJumpPower then
+		return math.max(hum.JumpPower, 40)
+	end
+	local h = hum.JumpHeight
+	if h < 1 then
+		h = 7.2
+	end
+	return math.sqrt(2 * workspace.Gravity * h)
+end
+
+local function isSlideKey(input)
+	return input.UserInputType == Enum.UserInputType.Keyboard and (input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.C)
+end
+
+local spoofOriginal = {}
+local spoofWatch = {}
+local spoofScanAt = 0
+local origDisplay = {}
+
+local function pushDisplayName(plr, text)
+	if not plr or text == nil or text == "" then
+		return
+	end
+	if origDisplay[plr] == nil then
+		local ok, current = pcall(function()
+			return plr.DisplayName
+		end)
+		origDisplay[plr] = ok and current or plr.Name
+	end
+	pcall(function()
+		if setscriptable then
+			setscriptable(plr, "DisplayName", true)
+		end
+	end)
+	pcall(function()
+		if plr.DisplayName ~= text then
+			plr.DisplayName = text
+		end
+	end)
+end
+
+local function restoreDisplays()
+	for plr, name in pairs(origDisplay) do
+		if typeof(plr) == "Instance" and plr.Parent then
+			pcall(function()
+				plr.DisplayName = name
+			end)
+		end
+	end
+	table.clear(origDisplay)
+end
+
+local function restoreSpoof()
+	for label, original in pairs(spoofOriginal) do
+		if typeof(label) == "Instance" and label.Parent then
+			pcall(function()
+				label.Text = original
+			end)
+		end
+	end
+	table.clear(spoofOriginal)
+	table.clear(spoofWatch)
+	restoreDisplays()
+	if hum then
+		pcall(function()
+			hum.DisplayName = LP.DisplayName
+		end)
+	end
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= LP and plr.Character then
+			local h = plr.Character:FindFirstChildOfClass("Humanoid")
+			if h then
+				pcall(function()
+					h.DisplayName = plr.DisplayName
+				end)
+			end
+		end
+	end
+end
+
+local function replacePlain(s, from, to)
+	if not from or from == "" or not string.find(s, from, 1, true) then
+		return s
+	end
+	local out, i = {}, 1
+	while true do
+		local a, b = string.find(s, from, i, true)
+		if not a then
+			out[#out + 1] = string.sub(s, i)
+			break
+		end
+		out[#out + 1] = string.sub(s, i, a - 1)
+		out[#out + 1] = to
+		i = b + 1
+	end
+	return table.concat(out)
+end
+
+local function labelMatches(text, plr)
+	if type(text) ~= "string" or text == "" then
+		return false
+	end
+	local plain = text:gsub("<.->", "")
+	local saved = origDisplay[plr]
+	if plain == plr.Name or plain == plr.DisplayName or plain == "@" .. plr.Name or plain == "@" .. plr.DisplayName then
+		return true
+	end
+	if saved and (plain == saved or plain == "@" .. saved) then
+		return true
+	end
+	if #plain <= 96 then
+		if #plr.DisplayName >= 3 and string.find(plain, plr.DisplayName, 1, true) then
+			return true
+		end
+		if saved and #saved >= 3 and saved ~= plr.DisplayName and string.find(plain, saved, 1, true) then
+			return true
+		end
+		if #plr.Name >= 3 and plr.Name ~= plr.DisplayName and string.find(plain, plr.Name, 1, true) then
+			return true
+		end
+	end
+	return false
+end
+
+local function desiredSpoof(plr)
+	if plr == LP then
+		return CFG.spoofSelfName
+	end
+	return CFG.spoofEnemyName
+end
+
+local function paintSpoofLabel(label, plr, replacement)
+	if replacement == "" or not label or not label.Parent then
+		return
+	end
+	local original = spoofOriginal[label]
+	local basis = original or label.Text
+	if not labelMatches(basis, plr) and not labelMatches(label.Text, plr) then
+		return
+	end
+	if original == nil then
+		spoofOriginal[label] = label.Text
+		basis = label.Text
+	end
+	local plain = basis:gsub("<.->", "")
+	local saved = origDisplay[plr]
+	local nextText
+	if plain == plr.Name or plain == plr.DisplayName or plain == "@" .. plr.Name or plain == "@" .. plr.DisplayName or plain == saved or (saved and plain == "@" .. saved) then
+		nextText = replacement
+	else
+		nextText = basis
+		if saved and #saved >= 3 then
+			nextText = replacePlain(nextText, saved, replacement)
+		end
+		if #plr.DisplayName >= 3 and plr.DisplayName ~= replacement then
+			nextText = replacePlain(nextText, plr.DisplayName, replacement)
+		end
+		if #plr.Name >= 3 and plr.Name ~= plr.DisplayName then
+			nextText = replacePlain(nextText, plr.Name, replacement)
+		end
+	end
+	if label.Text ~= nextText then
+		label.Text = nextText
+	end
+end
+
+local function collectText(root, into)
+	if not root then
+		return
+	end
+	if root:IsA("TextLabel") or root:IsA("TextButton") then
+		into[#into + 1] = root
+	end
+	for _, d in ipairs(root:GetDescendants()) do
+		if d:IsA("TextLabel") or d:IsA("TextButton") then
+			into[#into + 1] = d
+		end
+	end
+end
+
+local function plainText(text)
+	if type(text) ~= "string" then
+		return ""
+	end
+	return (text:gsub("<.->", ""):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function menuNameMatch(text, plr)
+	local plain = plainText(text)
+	if plain == "" or not plr then
+		return false
+	end
+	local function hit(name)
+		if not name or name == "" then
+			return false
+		end
+		if plain == name or plain == "@" .. name then
+			return true
+		end
+		if plain:sub(1, #name) == name then
+			local rest = plain:sub(#name + 1)
+			if #rest <= 6 and not rest:find("[%a%d]") then
+				return true
+			end
+		end
+		if plain:sub(1, #name + 1) == "@" .. name then
+			local rest = plain:sub(#name + 2)
+			if #rest <= 6 and not rest:find("[%a%d]") then
+				return true
+			end
+		end
+		return false
+	end
+	local saved = origDisplay[plr]
+	if hit(plr.Name) or hit(plr.DisplayName) or hit(saved) then
+		return true
+	end
+	if plain == (plr.DisplayName .. " (@" .. plr.Name .. ")") or plain == (plr.Name .. " (@" .. plr.DisplayName .. ")") then
+		return true
+	end
+	if saved and (plain == (saved .. " (@" .. plr.Name .. ")") or plain == (saved .. " @" .. plr.Name)) then
+		return true
+	end
+	if plain == (plr.DisplayName .. " @" .. plr.Name) or plain == (plr.DisplayName .. "\n@" .. plr.Name) then
+		return true
+	end
+	return false
+end
+
+local function rebuildSpoofWatch()
+	table.clear(spoofWatch)
+	if not CFG.usernameSpoof then
+		return
+	end
+	local seen = {}
+	local labels = {}
+	local function consider(root)
+		if root then
+			collectText(root, labels)
+		end
+	end
+	for _, plr in ipairs(Players:GetPlayers()) do
+		local c = plr.Character
+		if c then
+			local head = c:FindFirstChild("Head")
+			if head then
+				consider(head)
+			end
+			for _, d in ipairs(c:GetChildren()) do
+				if d:IsA("BillboardGui") or d:IsA("SurfaceGui") then
+					consider(d)
+				end
+			end
+		end
+	end
+	consider(LP:FindFirstChildOfClass("PlayerGui"))
+	local robloxGui = CoreGui and CoreGui:FindFirstChild("RobloxGui")
+	if robloxGui then
+		local list = robloxGui:FindFirstChild("PlayerList") or robloxGui:FindFirstChild("PlayerList", true)
+		consider(list)
+	end
+	for _, label in ipairs(labels) do
+		if seen[label] or not label.Parent or (gui and label:IsDescendantOf(gui)) then
+			continue
+		end
+		seen[label] = true
+		local basis = spoofOriginal[label] or label.Text
+		local plain = plainText(basis)
+		if #plain < 2 or #plain > 48 then
+			continue
+		end
+		local billboard = label:FindFirstAncestorWhichIsA("BillboardGui") or label:FindFirstAncestorWhichIsA("SurfaceGui")
+		local inMenu = not billboard
+		for _, plr in ipairs(Players:GetPlayers()) do
+			local repl = desiredSpoof(plr)
+			if repl == "" then
+				continue
+			end
+			local hit
+			if inMenu then
+				hit = menuNameMatch(basis, plr) or menuNameMatch(label.Text, plr)
+			else
+				hit = labelMatches(basis, plr) or labelMatches(label.Text, plr)
+			end
+			if hit then
+				spoofWatch[#spoofWatch + 1] = { label, plr, repl }
+				break
+			end
+		end
+	end
+end
+
+local function applySpoof()
+	if not CFG.usernameSpoof then
+		return
+	end
+	if CFG.spoofSelfName ~= "" and LP.DisplayName ~= CFG.spoofSelfName then
+		pushDisplayName(LP, CFG.spoofSelfName)
+		if hum and hum.DisplayName ~= CFG.spoofSelfName then
+			pcall(function()
+				hum.DisplayName = CFG.spoofSelfName
+			end)
+		end
+	end
+	if CFG.spoofEnemyName ~= "" then
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= LP and plr.DisplayName ~= CFG.spoofEnemyName then
+				pushDisplayName(plr, CFG.spoofEnemyName)
+				local ch = plr.Character
+				local h = ch and ch:FindFirstChildOfClass("Humanoid")
+				if h and h.DisplayName ~= CFG.spoofEnemyName then
+					pcall(function()
+						h.DisplayName = CFG.spoofEnemyName
+					end)
+				end
+			end
+		end
+	end
+	if tick() - spoofScanAt > 1.25 then
+		spoofScanAt = tick()
+		rebuildSpoofWatch()
+	end
+	for i = #spoofWatch, 1, -1 do
+		local item = spoofWatch[i]
+		if not item[1].Parent then
+			table.remove(spoofWatch, i)
+		else
+			paintSpoofLabel(item[1], item[2], item[3])
+		end
+	end
+end
+
+local SKY_PRESETS = {
+	["Aesthetic"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://1417494643",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxFt = "rbxassetid://1417494253",
+		SkyboxBk = "rbxassetid://1417494030",
+		SkyboxDn = "rbxassetid://1417494146",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://1417494402",
+		SkyboxRt = "rbxassetid://1417494499",
+		MoonAngularSize = 0,
+	},
+	["Aesthetic2"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://600835177",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxBk = "rbxassetid://600830446",
+		SkyboxFt = "rbxassetid://600832720",
+		SkyboxLf = "rbxassetid://600886090",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxDn = "rbxassetid://600831635",
+		SkyboxRt = "rbxassetid://600833862",
+		MoonAngularSize = 0,
+	},
+	["Aesthetic3"] = {
+		StarCount = 500,
+		SkyboxUp = "rbxassetid://151165227",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://151165191",
+		SkyboxBk = "rbxassetid://151165214",
+		SkyboxFt = "rbxassetid://151165224",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxDn = "rbxassetid://151165197",
+		SkyboxRt = "rbxassetid://151165206",
+		MoonAngularSize = 0,
+	},
+	["AestheticMountains"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://15470207755",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://15470202648",
+		SkyboxBk = "rbxassetid://15470198023",
+		SkyboxFt = "rbxassetid://15470200128",
+		SunTextureId = "rbxassetid://6196665106",
+		SunAngularSize = 21,
+		SkyboxDn = "rbxassetid://15470151245",
+		SkyboxRt = "rbxassetid://15470204862",
+		MoonAngularSize = 11,
+	},
+	["Alien"] = {
+		StarCount = 0,
+		SkyboxUp = "rbxassetid://159248176",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxFt = "rbxassetid://159248187",
+		SkyboxBk = "rbxassetid://159248188",
+		SkyboxDn = "rbxassetid://159248183",
+		SunTextureId = "rbxasset://sky/sun.jpg",
+		SunAngularSize = 21,
+		SkyboxLf = "rbxassetid://159248173",
+		SkyboxRt = "rbxassetid://159248192",
+		MoonAngularSize = 0,
+	},
+	["Ame"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://160186148",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxFt = "rbxassetid://160186027",
+		SkyboxBk = "rbxassetid://160185927",
+		SkyboxLf = "rbxassetid://160186075",
+		SunTextureId = "rbxasset://sky/sun.jpg",
+		SunAngularSize = 21,
+		SkyboxDn = "rbxassetid://160185945",
+		SkyboxRt = "rbxassetid://160186126",
+		MoonAngularSize = 11,
+	},
+	["Antartica"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://2118766003",
+		MoonTextureId = "rbxasset://sky/moon.jpg",
+		SkyboxFt = "rbxassetid://2118765204",
+		SkyboxDn = "rbxassetid://2118766919",
+		SunTextureId = "rbxasset://sky/sun.jpg",
+		SunAngularSize = 21,
+		SkyboxLf = "rbxassetid://2118764070",
+		SkyboxRt = "rbxassetid://2118761853",
+		SkyboxBk = "rbxassetid://2118763079",
+	},
+	["Art"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://9831769868",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxFt = "rbxassetid://9831766232",
+		SkyboxBk = "rbxassetid://9831762777",
+		SkyboxLf = "rbxassetid://9831768023",
+		SunTextureId = "rbxasset://sky/sun.jpg",
+		SunAngularSize = 21,
+		SkyboxDn = "rbxassetid://9831764283",
+		SkyboxRt = "rbxassetid://9831768909",
+		MoonAngularSize = 11,
+	},
+	["Beach"] = {
+		StarCount = 0,
+		SkyboxUp = "rbxassetid://173380790",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxDn = "rbxassetid://173380627",
+		SkyboxBk = "rbxassetid://173380597",
+		SkyboxFt = "rbxassetid://173380642",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 21,
+		SkyboxLf = "rbxassetid://173380671",
+		SkyboxRt = "rbxassetid://173380774",
+		MoonAngularSize = 11,
+	},
+	["BetterNight"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://15470303050",
+		SkyboxRt = "rbxassetid://15470299887",
+		SkyboxLf = "rbxassetid://15470297162",
+		SkyboxDn = "rbxassetid://15470291746",
+		SkyboxFt = "rbxassetid://15470294431",
+		SkyboxBk = "rbxassetid://15470289121",
+	},
+	["BetterNight2"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://248431605",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxBk = "rbxassetid://248431616",
+		SkyboxDn = "rbxassetid://248431677",
+		SkyboxLf = "rbxassetid://248431686",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxFt = "rbxassetid://248431598",
+		SkyboxRt = "rbxassetid://248431611",
+		MoonAngularSize = 1.5,
+	},
+	["BetterNight3"] = {
+		StarCount = 500,
+		SkyboxUp = "rbxassetid://2670644331",
+		MoonTextureId = "rbxassetid://1075087760",
+		SkyboxLf = "rbxassetid://2670643070",
+		SkyboxBk = "rbxassetid://2670643994",
+		SkyboxFt = "rbxassetid://2670643214",
+		SunTextureId = "rbxassetid://6196665106",
+		SunAngularSize = 21,
+		SkyboxDn = "rbxassetid://2670643365",
+		SkyboxRt = "rbxassetid://2670644173",
+		MoonAngularSize = 1.5,
+	},
+	["BetterSky"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://591059642",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://591057861",
+		SkyboxBk = "rbxassetid://591058823",
+		SkyboxFt = "rbxassetid://591058104",
+		SunTextureId = "rbxassetid://6196665106",
+		SunAngularSize = 0,
+		SkyboxDn = "rbxassetid://591059876",
+		SkyboxRt = "rbxassetid://591057625",
+		MoonAngularSize = 0,
+	},
+	["Blizzard"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://16653228333",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxBk = "rbxassetid://16653221738",
+		SkyboxFt = "rbxassetid://16653224051",
+		SkyboxDn = "rbxassetid://16653222701",
+		SunTextureId = "rbxassetid://6196665106",
+		SunAngularSize = 21,
+		SkyboxLf = "rbxassetid://16653225849",
+		SkyboxRt = "rbxassetid://16653227200",
+		MoonAngularSize = 0,
+	},
+	["BlueClouds"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://591059642",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://591057861",
+		SkyboxBk = "rbxassetid://591058823",
+		SkyboxFt = "rbxassetid://591058104",
+		SunTextureId = "rbxassetid://6196665106",
+		SunAngularSize = 0,
+		SkyboxDn = "rbxassetid://591059876",
+		SkyboxRt = "rbxassetid://591057625",
+		MoonAngularSize = 0,
+	},
+	["BluePlanet"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://16889004122",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://16888998994",
+		SkyboxDn = "rbxassetid://16888991855",
+		SkyboxBk = "rbxassetid://16888989874",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 21,
+		SkyboxFt = "rbxassetid://16888995219",
+		SkyboxRt = "rbxassetid://16889000916",
+		MoonAngularSize = 0,
+	},
+	["BlueSpace"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://16876552681",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://16876548320",
+		SkyboxBk = "rbxassetid://16876541778",
+		SkyboxFt = "rbxassetid://16876546384",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 21,
+		SkyboxDn = "rbxassetid://16876543880",
+		SkyboxRt = "rbxassetid://16876550345",
+		MoonAngularSize = 0,
+	},
+	["Cloudy"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://4495867486",
+		SkyboxRt = "rbxassetid://4495866584",
+		SkyboxLf = "rbxassetid://4495866035",
+		SkyboxDn = "rbxassetid://4495864887",
+		SkyboxFt = "rbxassetid://4495865458",
+		SkyboxBk = "rbxassetid://4495864450",
+	},
+	["DarkClouds"] = {
+		StarCount = 0,
+		SkyboxUp = "rbxassetid://190477146",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxDn = "rbxassetid://190477222",
+		SkyboxLf = "rbxassetid://190477185",
+		SkyboxBk = "rbxassetid://190477248",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxFt = "rbxassetid://190477200",
+		SkyboxRt = "rbxassetid://190477166",
+		MoonAngularSize = 1.5,
+	},
+	["DarkMountains"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://5098819127",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxBk = "rbxassetid://5098814730",
+		SkyboxFt = "rbxassetid://5098815653",
+		SkyboxDn = "rbxassetid://5098815227",
+		SunTextureId = "rbxassetid://6196665106",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://5098816155",
+		SkyboxRt = "rbxassetid://5098820352",
+		MoonAngularSize = 0,
+	},
+	["DarkishPink"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://570555929",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://570555840",
+		SkyboxDn = "rbxassetid://570555964",
+		SkyboxBk = "rbxassetid://570555736",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 21,
+		SkyboxFt = "rbxassetid://570555800",
+		SkyboxRt = "rbxassetid://570555882",
+		MoonAngularSize = 11,
+	},
+	["Dawn"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://250381047",
+		SkyboxFt = "rbxassetid://250380916",
+		SkyboxBk = "rbxassetid://250381017",
+		SkyboxLf = "rbxassetid://250380953",
+		SunTextureId = "rbxasset://sky/sun.jpg",
+		SunAngularSize = 21,
+		SkyboxDn = "rbxassetid://254156892",
+		SkyboxRt = "rbxassetid://250380985",
+		MoonAngularSize = 11,
+	},
+	["FPSBoost"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://11457548274",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxFt = "rbxassetid://11457548274",
+		SkyboxLf = "rbxassetid://11457548274",
+		SkyboxDn = "rbxassetid://11457548274",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxBk = "rbxassetid://11457548274",
+		SkyboxRt = "rbxassetid://11457548274",
+		MoonAngularSize = 0,
+	},
+	["FakeClouds"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://8496897504",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxDn = "rbxassetid://8496896250",
+		SkyboxBk = "rbxassetid://8496892810",
+		SkyboxFt = "rbxassetid://8496892810",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://8496892810",
+		SkyboxRt = "rbxassetid://8496892810",
+		MoonAngularSize = 0,
+	},
+	["Flame"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://6286790025",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://6286785801",
+		SkyboxBk = "rbxassetid://6286780109",
+		SkyboxFt = "rbxassetid://6286784186",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 21,
+		SkyboxDn = "rbxassetid://6286782353",
+		SkyboxRt = "rbxassetid://6286788245",
+		MoonAngularSize = 0,
+	},
+	["FlamingSunset"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://415688354",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxBk = "rbxassetid://415688378",
+		SkyboxFt = "rbxassetid://415688242",
+		SkyboxDn = "rbxassetid://415688193",
+		SunTextureId = "rbxassetid://6196665106",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://415688310",
+		SkyboxRt = "rbxassetid://415688274",
+		MoonAngularSize = 0,
+	},
+	["FunnyStorm"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://6280942402",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxDn = "rbxassetid://6280935347",
+		SkyboxLf = "rbxassetid://6280938749",
+		SkyboxBk = "rbxassetid://6280934001",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 21,
+		SkyboxFt = "rbxassetid://6280936575",
+		SkyboxRt = "rbxassetid://6280940989",
+		MoonAngularSize = 0,
+	},
+	["Galaxy"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://159454288",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxFt = "rbxassetid://159454293",
+		SkyboxLf = "rbxassetid://159454293",
+		SkyboxDn = "rbxassetid://159454296",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxBk = "rbxassetid://159454299",
+		SkyboxRt = "rbxassetid://159454293",
+		MoonAngularSize = 0,
+	},
+	["Galaxy2"] = {
+		StarCount = 500,
+		SkyboxUp = "rbxassetid://14164405298",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://14164398493",
+		SkyboxBk = "rbxassetid://14164368678",
+		SkyboxFt = "rbxassetid://14164389230",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxDn = "rbxassetid://14164386126",
+		SkyboxRt = "rbxassetid://14164402782",
+		MoonAngularSize = 0,
+	},
+	["Galaxy3"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://14543371676",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxFt = "rbxassetid://14543257810",
+		SkyboxBk = "rbxassetid://14543264135",
+		SkyboxDn = "rbxassetid://14543358958",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://14543275895",
+		SkyboxRt = "rbxassetid://14543280890",
+		MoonAngularSize = 0,
+	},
+	["GreenHaze"] = {
+		SkyboxDn = "rbxassetid://160193466",
+		SkyboxUp = "rbxassetid://160193458",
+		SkyboxRt = "rbxassetid://160193463",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://160193469",
+		SkyboxBk = "rbxassetid://160193404",
+		SkyboxFt = "rbxassetid://160193461",
+	},
+	["Hell"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://11730857150",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxBk = "rbxassetid://11730840088",
+		SkyboxFt = "rbxassetid://11730849615",
+		SkyboxLf = "rbxassetid://11730852920",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxDn = "rbxassetid://11730842997",
+		SkyboxRt = "rbxassetid://11730855491",
+		MoonAngularSize = 11,
+	},
+	["Lunar"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://179724054",
+		MoonTextureId = "rbxasset://sky/moon.jpg",
+		SkyboxFt = "rbxassetid://179724018",
+		SkyboxBk = "rbxassetid://179723991",
+		SkyboxDn = "rbxassetid://179724005",
+		SunTextureId = "rbxasset://sky/sun.jpg",
+		SunAngularSize = 21,
+		SkyboxLf = "rbxassetid://179724029",
+		SkyboxRt = "rbxassetid://179724037",
+		MoonAngularSize = 0,
+	},
+	["LunarNight"] = {
+		StarCount = 0,
+		SkyboxUp = "rbxassetid://187712111",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxBk = "rbxassetid://187713366",
+		SkyboxFt = "rbxassetid://187712836",
+		SkyboxLf = "rbxassetid://187713755",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxDn = "rbxassetid://187712428",
+		SkyboxRt = "rbxassetid://187714525",
+		MoonAngularSize = 0,
+	},
+	["LunarNight2"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://14365026442",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxDn = "rbxassetid://14365026242",
+		SkyboxLf = "rbxassetid://14365025904",
+		SkyboxBk = "rbxassetid://14365026085",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 21,
+		SkyboxFt = "rbxassetid://14365025735",
+		SkyboxRt = "rbxassetid://14365025444",
+		MoonAngularSize = 0,
+	},
+	["MagentaOrange"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://566616187",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxFt = "rbxassetid://566616141",
+		SkyboxBk = "rbxassetid://566616113",
+		SkyboxDn = "rbxassetid://566616232",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://566616044",
+		SkyboxRt = "rbxassetid://566616082",
+		MoonAngularSize = 0,
+	},
+	["Midnight"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://154185031",
+		MoonTextureId = "rbxasset://sky/moon.jpg",
+		SkyboxFt = "rbxassetid://154185021",
+		SkyboxBk = "rbxassetid://154185004",
+		SkyboxDn = "rbxassetid://154184960",
+		SunTextureId = "rbxasset://sky/sun.jpg",
+		SunAngularSize = 21,
+		SkyboxLf = "rbxassetid://154184943",
+		SkyboxRt = "rbxassetid://154184972",
+		MoonAngularSize = 0,
+	},
+	["Milkyway"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://137817405681365",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxFt = "rbxassetid://104400530594543",
+		SkyboxBk = "rbxassetid://129876530632297",
+		SkyboxDn = "rbxassetid://108406529909981",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://73372229972523",
+		SkyboxRt = "rbxassetid://87408857415924",
+		MoonAngularSize = 0,
+	},
+	["Moon"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://17489393055",
+		MoonTextureId = "rbxasset://sky/moon.jpg",
+		SkyboxFt = "rbxassetid://17489388310",
+		SkyboxDn = "rbxassetid://17489387417",
+		SunTextureId = "rbxasset://sky/sun.jpg",
+		SunAngularSize = 21,
+		SkyboxLf = "rbxassetid://17489389632",
+		SkyboxRt = "rbxassetid://17489391101",
+		SkyboxBk = "rbxassetid://17489386489",
+	},
+	["Mountains"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://15359412677",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://15359411633",
+		SkyboxDn = "rbxassetid://15359411132",
+		SkyboxBk = "rbxassetid://15359410490",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 21,
+		SkyboxFt = "rbxassetid://15359412131",
+		SkyboxRt = "rbxassetid://15359417656",
+		MoonAngularSize = 0,
+	},
+	["Nebula"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://5260824661",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://5260800833",
+		SkyboxDn = "rbxassetid://5260653793",
+		SkyboxBk = "rbxassetid://5260808177",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxFt = "rbxassetid://5260817288",
+		SkyboxRt = "rbxassetid://5260811073",
+		MoonAngularSize = 0,
+	},
+	["Nebula2"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://16932810138",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxFt = "rbxassetid://16932800523",
+		SkyboxLf = "rbxassetid://16932803722",
+		SkyboxDn = "rbxassetid://16932797813",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxBk = "rbxassetid://16932794531",
+		SkyboxRt = "rbxassetid://16932806825",
+		MoonAngularSize = 0,
+	},
+	["Nebula3"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://17839226876",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxBk = "rbxassetid://17839210699",
+		SkyboxFt = "rbxassetid://17839218166",
+		SkyboxLf = "rbxassetid://17839220800",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxDn = "rbxassetid://17839215896",
+		SkyboxRt = "rbxassetid://17839223605",
+		MoonAngularSize = 0,
+	},
+	["Nebula4"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://17103639457",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxDn = "rbxassetid://17103622190",
+		SkyboxBk = "rbxassetid://17103618635",
+		SkyboxFt = "rbxassetid://17103624898",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://17103628153",
+		SkyboxRt = "rbxassetid://17103636666",
+		MoonAngularSize = 0,
+	},
+	["Nebula5"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://17124369657",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxDn = "rbxassetid://17124359797",
+		SkyboxBk = "rbxassetid://17124357467",
+		SkyboxFt = "rbxassetid://17124362093",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://17124365127",
+		SkyboxRt = "rbxassetid://17124367200",
+		MoonAngularSize = 0,
+	},
+	["Nebula6"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://16694204069",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://16694197080",
+		SkyboxDn = "rbxassetid://16694190947",
+		SkyboxBk = "rbxassetid://16694187412",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 21,
+		SkyboxFt = "rbxassetid://16694194795",
+		SkyboxRt = "rbxassetid://16694200892",
+		MoonAngularSize = 11,
+	},
+	["NetherWorld"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://14365019327",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxFt = "rbxassetid://14365018399",
+		SkyboxLf = "rbxassetid://14365018705",
+		SkyboxDn = "rbxassetid://14365023350",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxBk = "rbxassetid://14365019002",
+		SkyboxRt = "rbxassetid://14365018143",
+		MoonAngularSize = 0,
+	},
+	["NewYork"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://11333967970",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxBk = "rbxassetid://11333973069",
+		SkyboxFt = "rbxassetid://11333964303",
+		SkyboxDn = "rbxassetid://11333969768",
+		SunTextureId = "rbxassetid://6196665106",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://11333971332",
+		SkyboxRt = "rbxassetid://11333982864",
+		MoonAngularSize = 0,
+	},
+	["NightMountains"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://264907379",
+		MoonTextureId = "rbxasset://sky/moon.jpg",
+		SkyboxFt = "rbxassetid://264909420",
+		SkyboxBk = "rbxassetid://264908339",
+		SkyboxLf = "rbxassetid://264909758",
+		SunTextureId = "rbxasset://sky/sun.jpg",
+		SunAngularSize = 21,
+		SkyboxDn = "rbxassetid://264907909",
+		SkyboxRt = "rbxassetid://264908886",
+		MoonAngularSize = 11,
+	},
+	["Orange"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://150939082",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxDn = "rbxassetid://150939038",
+		SkyboxBk = "rbxassetid://150939022",
+		SkyboxFt = "rbxassetid://150939047",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://150939056",
+		SkyboxRt = "rbxassetid://150939063",
+		MoonAngularSize = 0,
+	},
+	["OverPlanet"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://165052345",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://165052365",
+		SkyboxDn = "rbxassetid://165052286",
+		SkyboxBk = "rbxassetid://165052268",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 21,
+		SkyboxFt = "rbxassetid://165052328",
+		SkyboxRt = "rbxassetid://165052306",
+		MoonAngularSize = 11,
+	},
+	["Pastel"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://2128462236",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxDn = "rbxassetid://2128462480",
+		SkyboxBk = "rbxassetid://2128458653",
+		SkyboxFt = "rbxassetid://2128458653",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://2128462027",
+		SkyboxRt = "rbxassetid://2128462027",
+		MoonAngularSize = 0,
+	},
+	["Pink"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://271077958",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://271042310",
+		SkyboxBk = "rbxassetid://271042516",
+		SkyboxFt = "rbxassetid://271042556",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxDn = "rbxassetid://271077243",
+		SkyboxRt = "rbxassetid://271042467",
+		MoonAngularSize = 0,
+	},
+	["PinkArt"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://79190209626172",
+		SkyboxFt = "rbxassetid://104560113223878",
+		SkyboxLf = "rbxassetid://80395333901607",
+		SkyboxDn = "rbxassetid://78865378050055",
+		SunAngularSize = 21,
+		SkyboxBk = "rbxassetid://71607054149497",
+		SkyboxRt = "rbxassetid://87570388049514",
+		MoonAngularSize = 0,
+	},
+	["PinkMountains"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://160188588",
+		SkyboxFt = "rbxassetid://160188609",
+		SkyboxLf = "rbxassetid://160188589",
+		SkyboxDn = "rbxassetid://160188614",
+		SunAngularSize = 21,
+		SkyboxBk = "rbxassetid://160188495",
+		SkyboxRt = "rbxassetid://160188597",
+		MoonAngularSize = 0,
+	},
+	["Pinkie"] = {
+		StarCount = 0,
+		SkyboxUp = "rbxassetid://11554996247",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxDn = "rbxassetid://11555013415",
+		SkyboxBk = "rbxassetid://11555017034",
+		SkyboxFt = "rbxassetid://11555010145",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://11555006545",
+		SkyboxRt = "rbxassetid://11555000712",
+		MoonAngularSize = 1.5,
+	},
+	["Purple"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://8539981085",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxBk = "rbxassetid://8539982183",
+		SkyboxFt = "rbxassetid://8539981721",
+		SkyboxLf = "rbxassetid://8539981424",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxDn = "rbxassetid://8539981943",
+		SkyboxRt = "rbxassetid://8539980766",
+		MoonAngularSize = 0,
+	},
+	["Purple2"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://8107849791",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxBk = "rbxassetid://8107841671",
+		SkyboxFt = "rbxassetid://8107841671",
+		SkyboxDn = "rbxassetid://6444884785",
+		SunTextureId = "rbxassetid://6196665106",
+		SunAngularSize = 11,
+		SkyboxLf = "rbxassetid://8107841671",
+		SkyboxRt = "rbxassetid://8107841671",
+		MoonAngularSize = 0,
+	},
+	["Purple3"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://433274285",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxFt = "rbxassetid://433274131",
+		SkyboxLf = "rbxassetid://433274370",
+		SkyboxDn = "rbxassetid://433274194",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxBk = "rbxassetid://433274085",
+		SkyboxRt = "rbxassetid://433274429",
+		MoonAngularSize = 0,
+	},
+	["PurpleClouds"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://570557727",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxDn = "rbxassetid://570557775",
+		SkyboxLf = "rbxassetid://570557620",
+		SkyboxBk = "rbxassetid://570557514",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 21,
+		SkyboxFt = "rbxassetid://570557559",
+		SkyboxRt = "rbxassetid://570557672",
+		MoonAngularSize = 0,
+	},
+	["PurpleMountains"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://17901365106",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://17901359687",
+		SkyboxDn = "rbxassetid://17901366771",
+		SkyboxBk = "rbxassetid://17901353811",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxFt = "rbxassetid://17901356262",
+		SkyboxRt = "rbxassetid://17901362326",
+		MoonAngularSize = 0,
+	},
+	["PurpleNight"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://5084576400",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxFt = "rbxassetid://5260817288",
+		SkyboxBk = "rbxassetid://5260808177",
+		SkyboxDn = "rbxassetid://5260653793",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://5260800833",
+		SkyboxRt = "rbxassetid://5260800833",
+		MoonAngularSize = 0,
+	},
+	["PurplePlanet"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://16262366016",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxFt = "rbxassetid://16262360469",
+		SkyboxLf = "rbxassetid://16262362003",
+		SkyboxDn = "rbxassetid://16262358026",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 21,
+		SkyboxBk = "rbxassetid://16262356578",
+		SkyboxRt = "rbxassetid://16262363873",
+		MoonAngularSize = 0,
+	},
+	["PurpleSpace"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://15983964246",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxLf = "rbxassetid://15983967420",
+		SkyboxBk = "rbxassetid://15983968922",
+		SkyboxFt = "rbxassetid://5260817288",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxDn = "rbxassetid://15983966825",
+		SkyboxRt = "rbxassetid://15983966246",
+		MoonAngularSize = 0,
+	},
+	["Realistic"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://402560052",
+		MoonTextureId = "rbxasset://sky/moon.jpg",
+		SkyboxFt = "rbxassetid://402559953",
+		SkyboxBk = "rbxassetid://402559900",
+		SkyboxDn = "rbxassetid://402559927",
+		SunTextureId = "rbxasset://sky/sun.jpg",
+		SunAngularSize = 21,
+		SkyboxLf = "rbxassetid://402559983",
+		SkyboxRt = "rbxassetid://402560019",
+		MoonAngularSize = 0,
+	},
+	["RedNight"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://401664936",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxBk = "rbxassetid://401664839",
+		SkyboxFt = "rbxassetid://401664960",
+		SkyboxLf = "rbxassetid://401664881",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxDn = "rbxassetid://401664862",
+		SkyboxRt = "rbxassetid://401664901",
+		MoonAngularSize = 0,
+	},
+	["Retro"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://16642401907",
+		MoonTextureId = "rbxasset://sky/moon.jpg",
+		SkyboxFt = "rbxassetid://16642398372",
+		SkyboxBk = "rbxassetid://16642396302",
+		SkyboxDn = "rbxassetid://16642397027",
+		SunTextureId = "rbxasset://sky/sun.jpg",
+		SunAngularSize = 21,
+		SkyboxLf = "rbxassetid://16642399309",
+		SkyboxRt = "rbxassetid://16642400745",
+		MoonAngularSize = 0,
+	},
+	["Space"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://166510114",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxDn = "rbxassetid://166510057",
+		SkyboxBk = "rbxassetid://166509999",
+		SkyboxFt = "rbxassetid://166510116",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://166510092",
+		SkyboxRt = "rbxassetid://166510131",
+		MoonAngularSize = 0,
+	},
+	["Space2"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://11844053742",
+		MoonTextureId = "rbxassetid://11844121592",
+		SkyboxBk = "rbxassetid://11844076072",
+		SkyboxDn = "rbxassetid://11844069700",
+		SkyboxFt = "rbxassetid://11844067209",
+		SunAngularSize = 11,
+		SkyboxLf = "rbxassetid://11844063543",
+		SkyboxRt = "rbxassetid://11844058446",
+		MoonAngularSize = 20,
+	},
+	["Storm"] = {
+		SkyboxUp = "rbxassetid://1618913654",
+		MoonTextureId = "rbxassetid://1075087760",
+		SkyboxFt = "rbxassetid://1618913244",
+		SkyboxBk = "rbxassetid://1618912481",
+		SkyboxDn = "rbxassetid://1618913943",
+		SunTextureId = "rbxassetid://1084351190",
+		SunAngularSize = 0,
+		SkyboxLf = "rbxassetid://1618912849",
+		SkyboxRt = "rbxassetid://1618911568",
+		MoonAngularSize = 0,
+	},
+	["Valentines"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://11427771954",
+		SkyboxFt = "rbxassetid://11427769401",
+		SkyboxLf = "rbxassetid://11427769401",
+		SkyboxDn = "rbxassetid://11427770685",
+		SunAngularSize = 21,
+		SkyboxBk = "rbxassetid://11427769401",
+		SkyboxRt = "rbxassetid://11427769401",
+		MoonAngularSize = 0,
+	},
+	["Winter"] = {
+		StarCount = 3000,
+		SkyboxUp = "rbxassetid://155674931",
+		MoonTextureId = "rbxassetid://6444320592",
+		SkyboxBk = "rbxassetid://155657655",
+		SkyboxFt = "rbxassetid://155657609",
+		SkyboxLf = "rbxassetid://155657671",
+		SunTextureId = "rbxassetid://8281961896",
+		SunAngularSize = 21,
+		SkyboxDn = "rbxassetid://155674246",
+		SkyboxRt = "rbxassetid://155657619",
+		MoonAngularSize = 11,
+	},
+	["Gray"] = {
+		SkyboxFt = "rbxassetid://11457548274",
+		SkyboxBk = "rbxassetid://11457548274",
+		SkyboxLf = "rbxassetid://11457548274",
+		SkyboxRt = "rbxassetid://11457548274",
+		SkyboxUp = "rbxassetid://11457548274",
+		SkyboxDn = "rbxassetid://11457548274",
+		StarCount = 0, SunAngularSize = 0, MoonAngularSize = 0,
+	},
+}
+
+local SKY_NAMES = { "Default", "Gray" }
+for skyName in pairs(SKY_PRESETS) do
+	if skyName ~= "Gray" then
+		SKY_NAMES[#SKY_NAMES + 1] = skyName
+	end
+end
+table.sort(SKY_NAMES, function(a, b)
+	local rank = { Default = 0, Gray = 1 }
+	local ra, rb = rank[a] or 2, rank[b] or 2
+	if ra ~= rb then
+		return ra < rb
+	end
+	return a:lower() < b:lower()
+end)
+
+local origWorld
+local worldCC
+local worldApplying = false
+
+local function snapshotWorld()
+	if origWorld then
+		return
+	end
+	local skyInst = Lighting:FindFirstChildOfClass("Sky")
+	origWorld = {
+		Ambient = Lighting.Ambient,
+		OutdoorAmbient = Lighting.OutdoorAmbient,
+		Brightness = Lighting.Brightness,
+		ClockTime = Lighting.ClockTime,
+		FogColor = Lighting.FogColor,
+		FogStart = Lighting.FogStart,
+		FogEnd = Lighting.FogEnd,
+		sky = nil,
+	}
+	if skyInst then
+		origWorld.sky = {
+			SkyboxBk = skyInst.SkyboxBk,
+			SkyboxDn = skyInst.SkyboxDn,
+			SkyboxFt = skyInst.SkyboxFt,
+			SkyboxLf = skyInst.SkyboxLf,
+			SkyboxRt = skyInst.SkyboxRt,
+			SkyboxUp = skyInst.SkyboxUp,
+			StarCount = skyInst.StarCount,
+			SunAngularSize = skyInst.SunAngularSize,
+			MoonAngularSize = skyInst.MoonAngularSize,
+			SunTextureId = skyInst.SunTextureId,
+			MoonTextureId = skyInst.MoonTextureId,
+		}
+	end
+end
+
+local function applySkyProps(skyInst, props)
+	if not skyInst or not props then
+		return
+	end
+	for _, key in ipairs({ "SkyboxBk", "SkyboxDn", "SkyboxFt", "SkyboxLf", "SkyboxRt", "SkyboxUp", "StarCount", "SunAngularSize", "MoonAngularSize", "SunTextureId", "MoonTextureId" }) do
+		if props[key] ~= nil then
+			pcall(function()
+				skyInst[key] = props[key]
+			end)
+		end
+	end
+end
+
+local function restoreWorld()
+	snapshotWorld()
+	worldApplying = true
+	local o = origWorld
+	pcall(function()
+		Lighting.Ambient = o.Ambient
+		Lighting.OutdoorAmbient = o.OutdoorAmbient
+		Lighting.Brightness = o.Brightness
+		Lighting.ClockTime = o.ClockTime
+		Lighting.FogColor = o.FogColor
+		Lighting.FogStart = o.FogStart
+		Lighting.FogEnd = o.FogEnd
+	end)
+	if worldCC then
+		pcall(function()
+			worldCC:Destroy()
+		end)
+		worldCC = nil
+	end
+	local skyInst = Lighting:FindFirstChildOfClass("Sky")
+	if o.sky and skyInst then
+		applySkyProps(skyInst, o.sky)
+	end
+	worldApplying = false
+end
+
+local function applyWorld()
+	snapshotWorld()
+	if not CFG.worldEnabled then
+		restoreWorld()
+		return
+	end
+	worldApplying = true
+	pcall(function()
+		Lighting.ClockTime = CFG.worldClock
+		Lighting.Brightness = CFG.worldBrightness
+		Lighting.FogStart = CFG.worldFogStart
+		Lighting.FogEnd = math.max(CFG.worldFogEnd, CFG.worldFogStart + 10)
+	end)
+	if CFG.worldSky == "Gray" then
+		pcall(function()
+			Lighting.Ambient = Color3.fromRGB(140, 140, 140)
+			Lighting.OutdoorAmbient = Color3.fromRGB(140, 140, 140)
+			Lighting.FogColor = Color3.fromRGB(160, 160, 160)
+			Lighting.ClockTime = 12
+		end)
+	end
+	local skyInst = Lighting:FindFirstChildOfClass("Sky")
+	if not skyInst then
+		skyInst = Instance.new("Sky")
+		skyInst.Name = "KE_Sky"
+		skyInst.Parent = Lighting
+	end
+	if CFG.worldSky ~= "Default" and SKY_PRESETS[CFG.worldSky] then
+		applySkyProps(skyInst, SKY_PRESETS[CFG.worldSky])
+	elseif origWorld and origWorld.sky then
+		applySkyProps(skyInst, origWorld.sky)
+	end
+	if not worldCC or not worldCC.Parent then
+		worldCC = Instance.new("ColorCorrectionEffect")
+		worldCC.Name = "KE_WorldCC"
+		worldCC.Parent = Lighting
+	end
+	worldCC.Saturation = CFG.worldSaturation
+	worldCC.Contrast = CFG.worldContrast
+	worldCC.Enabled = true
+	worldApplying = false
+end
+
+local function syncRuntime()
+	if CFG.noclip or CFG.translocate then
+		applyNoclip(true)
+	else
+		applyNoclip(false)
+	end
+	if hum then
+		hum.WalkSpeed = CFG.speedwalk and CFG.speedValue or baseSpeed
+	end
+	if CFG.customAnimEnabled then
+		playSelectedAnim()
+	else
+		stopAnim()
+	end
+	spoofScanAt = 0
+	if CFG.usernameSpoof then
+		applySpoof()
+	else
+		restoreSpoof()
+	end
+	if rebuildPriority then
+		pcall(rebuildPriority)
+	end
+	if rebuildWhitelist then
+		pcall(rebuildWhitelist)
+	end
+	pcall(applyWorld)
+end
+
+local function onChar(c)
+	char = c
+	hrp = c:WaitForChild("HumanoidRootPart", 8)
+	hum = c:WaitForChild("Humanoid", 8)
+	collideState = {}
+	airJumps = 0
+	slideBase = nil
+	if hum and not CFG.speedwalk then
+		baseSpeed = hum.WalkSpeed > 0 and hum.WalkSpeed or 16
+	end
+	task.delay(0.25, function()
+		if killed or LP.Character ~= c then
+			return
+		end
+		syncRuntime()
+	end)
+end
+if LP.Character then
+	task.spawn(onChar, LP.Character)
+end
+on(LP.CharacterAdded, onChar)
+
+local function alive(plr)
+	local c = plr and plr.Character
+	if not c then
+		return false
+	end
+	local h = c:FindFirstChildOfClass("Humanoid")
+	local r = c:FindFirstChild("HumanoidRootPart")
+	return h ~= nil and r ~= nil and h.Health > 0
+end
+
+local function selfAlive()
+	return char ~= nil and hum ~= nil and hrp ~= nil and hum.Parent ~= nil and hrp.Parent ~= nil and hum.Health > 0
+end
+
+local function teamToken(plr)
+	if not plr then
+		return nil
+	end
+	local function usable(v)
+		if v == nil or v == false or v == "" or v == 0 or v == "0" or v == "Neutral" or v == "FFA" then
+			return nil
+		end
+		return v
+	end
+	local v = usable(plr:GetAttribute("TeamID")) or usable(plr:GetAttribute("TeamId"))
+	local c = plr.Character
+	if v == nil and c then
+		v = usable(c:GetAttribute("TeamID")) or usable(c:GetAttribute("TeamId"))
+	end
+	if v ~= nil then
+		return v
+	end
+	if plr.Team and not plr.Neutral then
+		return plr.Team
+	end
+	return nil
+end
+
+local function skipped(plr)
+	if not plr or plr == LP then
+		return true
+	end
+	if whitelist[plr.UserId] then
+		return true
+	end
+	if CFG.teamCheck then
+		local a, b = teamToken(LP), teamToken(plr)
+		if a ~= nil and a == b then
+			return true
+		end
+	end
+	return false
+end
+
+local function tooFar(plr)
+	if CFG.ignoreDistance <= 0 or not hrp then
+		return false
+	end
+	local r = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+	if not r then
+		return true
+	end
+	return (r.Position - hrp.Position).Magnitude > CFG.ignoreDistance
+end
+
+local function getTargetCharacter()
+	if not hrp then
+		return nil
+	end
+	if CFG.priorityUserId then
+		local p = Players:GetPlayerByUserId(CFG.priorityUserId)
+		if p and not skipped(p) and alive(p) and not tooFar(p) then
+			return p.Character
+		end
+	end
+	local closest, minDist = nil, math.huge
+	for _, other in ipairs(Players:GetPlayers()) do
+		if not skipped(other) and alive(other) and not tooFar(other) then
+			local r = other.Character and other.Character:FindFirstChild("HumanoidRootPart")
+			if r then
+				local d = (r.Position - hrp.Position).Magnitude
+				if d < minDist then
+					minDist = d
+					closest = other.Character
+				end
+			end
+		end
+	end
+	return closest
+end
+
+local SAMPLE = { "Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "Torso", "LeftUpperArm", "RightUpperArm", "LeftUpperLeg", "RightUpperLeg" }
+local visParams = RaycastParams.new()
+visParams.FilterType = Enum.RaycastFilterType.Exclude
+local trigParams = RaycastParams.new()
+trigParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function partVisible(part)
+	if not part or not Camera then
+		return false
+	end
+	visParams.FilterDescendantsInstances = { char, Camera }
+	local origin = Camera.CFrame.Position
+	local hit = workspace:Raycast(origin, part.Position - origin, visParams)
+	if not hit then
+		return true
+	end
+	return hit.Instance:IsDescendantOf(part.Parent)
+end
+
+local function is35Visible(character)
+	local seen, total = 0, 0
+	for _, name in ipairs(SAMPLE) do
+		local p = character:FindFirstChild(name)
+		if p then
+			total += 1
+			if partVisible(p) then
+				seen += 1
+			end
+		end
+	end
+	return total > 0 and (seen / total) >= 0.35
+end
+
+local function getAimPart(character, mode)
+	if mode == "Head" then
+		return character:FindFirstChild("Head") or character:FindFirstChild("HumanoidRootPart")
+	elseif mode == "Torso" then
+		return character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso") or character:FindFirstChild("HumanoidRootPart")
+	end
+	return character:FindFirstChild("HumanoidRootPart")
+end
+
+local function screenDist(worldPos)
+	local v, onScreen = Camera:WorldToViewportPoint(worldPos)
+	if not onScreen or v.Z < 0 then
+		return math.huge, v, false
+	end
+	local c = Camera.ViewportSize / 2
+	return (Vector2.new(v.X, v.Y) - c).Magnitude, v, true
+end
+
+local function pickTarget(radiusPx, pointMode, visCheck)
+	local best, bestD = nil, radiusPx
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if not skipped(plr) and alive(plr) then
+			local c = plr.Character
+			local h = c:FindFirstChildOfClass("Humanoid")
+			local low = CFG.healthCheck and h and h.Health < 0.1
+			if not low and (not visCheck or is35Visible(c)) then
+				local part = getAimPart(c, pointMode)
+				if part then
+					local d, _, onScreen = screenDist(part.Position)
+					if onScreen and d < bestD then
+						bestD = d
+						best = part
+					end
+				end
+			end
+		end
+	end
+	return best
+end
+
+local function featureOn(flag, mode, held)
+	if not flag then
+		return false
+	end
+	if mode == "Always" then
+		return true
+	end
+	if mode == "Hold" then
+		return held
+	end
+	return true
+end
+
+local function prettyKey(name)
+	if name == "MouseButton1" then
+		return "Mouse1"
+	elseif name == "MouseButton2" then
+		return "Mouse2"
+	end
+	return name or "None"
+end
+
+local function matchBind(input, name)
+	if not name or name == "" or name == "None" then
+		return false
+	end
+	if input.UserInputType == Enum.UserInputType.Keyboard then
+		return input.KeyCode.Name == name
+	end
+	return input.UserInputType.Name == name
+end
+
+-- ====================== UI ROOT ======================
+local guiParent = (gethui and gethui()) or CoreGui
+pcall(function()
+	local old = guiParent:FindFirstChild("KiciaEnhancements")
+	if old then
+		old:Destroy()
+	end
+end)
+
+gui = Instance.new("ScreenGui")
+gui.Name = "KiciaEnhancements"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 999999
+gui.Parent = guiParent
+
+local registry = {}
+local refreshers = {}
+
+local function track(obj, kind, role)
+	registry[#registry + 1] = { obj = obj, kind = kind, role = role }
+	return obj
+end
+
+local function watch(fn)
+	refreshers[#refreshers + 1] = fn
+	fn()
+end
+
+local function corner(p, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r or 8)
+	c.Parent = p
+	return c
+end
+
+local function addStroke(p, thickness)
+	local s = Instance.new("UIStroke")
+	s.Thickness = thickness or 1.5
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.Parent = p
+	track(s, "stroke", "outline")
+	return s
+end
+
+
+local UI_FONTS = {
+	"Gotham", "GothamMedium", "GothamBold",
+	"BuilderSans", "BuilderSansMedium", "BuilderSansBold",
+	"SourceSans", "Roboto", "Ubuntu", "Michroma", "Oswald", "Code",
+}
+
+local function uiFontEnum()
+	local name = (PREFS and PREFS.uiFont) or "Gotham"
+	local ok, font = pcall(function()
+		return Enum.Font[name]
+	end)
+	if ok and font then
+		return font
+	end
+	return Enum.Font.Gotham
+end
+
+local function applyUiFont()
+	if not gui then
+		return
+	end
+	local font = uiFontEnum()
+	local weight = (PREFS.uiBold and Enum.FontWeight.Bold) or Enum.FontWeight.Regular
+	local style = (PREFS.uiItalic and Enum.FontStyle.Italic) or Enum.FontStyle.Normal
+	local scale = math.clamp(tonumber(PREFS.uiSize) or 13, 11, 18) / 13
+	for _, d in ipairs(gui:GetDescendants()) do
+		if d:IsA("TextLabel") or d:IsA("TextButton") or d:IsA("TextBox") then
+			if not d:FindFirstAncestor("Icon") and d.Name ~= "LogoText" then
+				if d:GetAttribute("KEBase") == nil then
+					d:SetAttribute("KEBase", d.TextSize)
+				end
+				local base = tonumber(d:GetAttribute("KEBase")) or 13
+				d.TextSize = math.clamp(math.floor(base * scale + 0.5), 9, 28)
+				local applied = false
+				pcall(function()
+					local face = Font.fromEnum(font)
+					d.FontFace = Font.new(face.Family, weight, style)
+					applied = true
+				end)
+				if not applied then
+					d.Font = font
+				end
+			end
+		end
+	end
+end
+
+local function textOf(parent, str, role, size, bold)
+	local l = Instance.new("TextLabel")
+	l.BackgroundTransparency = 1
+	l.Font = uiFontEnum()
+	l.TextSize = size or 13
+	l.TextXAlignment = Enum.TextXAlignment.Left
+	l.TextTruncate = Enum.TextTruncate.AtEnd
+	l.Text = str or ""
+	l:SetAttribute("KEBase", size or 13)
+	l.Parent = parent
+	track(l, "text", role or "font")
+	return l
+end
+
+local function iconTint()
+	local main = THEME.main.c
+	local bg = THEME.background.c
+	local function lum(c)
+		return c.R * 0.299 + c.G * 0.587 + c.B * 0.114
+	end
+	local c = main
+	if lum(c) < 0.55 then
+		c = main:Lerp(Color3.new(1, 1, 1), 0.72)
+	end
+	local diff = math.abs(c.R - bg.R) + math.abs(c.G - bg.G) + math.abs(c.B - bg.B)
+	if diff < 0.22 then
+		return THEME.font.c
+	end
+	return c
+end
+
+local function paintRoles()
+	local fontC = THEME.font.c
+	local mutedC = fontC:Lerp(THEME.background.c, 0.42)
+	local icons = iconTint()
+	local map = {
+		background = THEME.background,
+		main = THEME.main,
+		outline = THEME.outline,
+		font = THEME.font,
+		accent = THEME.accent,
+	}
+	local aliveReg = {}
+	for _, item in ipairs(registry) do
+		local obj = item.obj
+		if obj and obj.Parent then
+			aliveReg[#aliveReg + 1] = item
+			local role = item.role
+			if item.kind == "text" then
+				local c, t
+				if role == "icon" then
+					c, t = icons, 0
+				elseif role == "muted" then
+					c, t = mutedC, 0
+				elseif role == "danger" then
+					c, t = FIXED.danger, 0
+				elseif role == "success" then
+					c, t = FIXED.success, 0
+				elseif role == "warning" then
+					c, t = FIXED.warning, 0
+				elseif map[role] then
+					c, t = map[role].c, map[role].t
+				else
+					c, t = fontC, 0
+				end
+				obj.TextColor3 = c
+				obj.TextTransparency = t
+			elseif item.kind == "bg" then
+				local e = map[role] or THEME.main
+				if role == "danger" then
+					obj.BackgroundColor3 = FIXED.danger
+					obj.BackgroundTransparency = 0
+				elseif role == "success" then
+					obj.BackgroundColor3 = FIXED.success
+					obj.BackgroundTransparency = 0
+				else
+					obj.BackgroundColor3 = e.c
+					obj.BackgroundTransparency = e.t
+				end
+			elseif item.kind == "stroke" then
+				obj.Color = THEME.outline.c
+				obj.Transparency = math.clamp(THEME.outline.t, 0, 0.85)
+			elseif item.kind == "image" then
+				obj.ImageColor3 = THEME.accent.c
+				obj.ImageTransparency = THEME.accent.t
+			end
+		end
+	end
+	registry = aliveReg
+	applyUiFont()
+end
+
+local function repaint()
+	paintRoles()
+	for _, fn in ipairs(refreshers) do
+		fn()
+	end
+end
+
+local notifLayer = Instance.new("Frame")
+notifLayer.Name = "KE_Notifications"
+notifLayer.Size = UDim2.new(0, 280, 1, -40)
+notifLayer.Position = UDim2.new(1, -296, 0, 16)
+notifLayer.BackgroundTransparency = 1
+notifLayer.ZIndex = 300
+notifLayer.Parent = gui
+local notifLayout = Instance.new("UIListLayout")
+notifLayout.Padding = UDim.new(0, 6)
+notifLayout.SortOrder = Enum.SortOrder.LayoutOrder
+notifLayout.Parent = notifLayer
+local notifN = 0
+
+local function notify(title, message, role)
+	if not PREFS.notifications then
+		return
+	end
+	notifN += 1
+	local toast = Instance.new("Frame")
+	toast.Size = UDim2.new(1, 0, 0, 0)
+	toast.AutomaticSize = Enum.AutomaticSize.Y
+	toast.BorderSizePixel = 0
+	toast.ZIndex = 301
+	toast.LayoutOrder = notifN
+	toast.Parent = notifLayer
+	track(toast, "bg", "main")
+	corner(toast, 4)
+	addStroke(toast, 1.5)
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 8)
+	pad.PaddingBottom = UDim.new(0, 8)
+	pad.PaddingLeft = UDim.new(0, 10)
+	pad.PaddingRight = UDim.new(0, 10)
+	pad.Parent = toast
+	local titleL = textOf(toast, title, role or "accent", 13, true)
+	titleL.Size = UDim2.new(1, 0, 0, 16)
+	titleL.ZIndex = 302
+	if message and message ~= "" then
+		local msg = textOf(toast, message, "muted", 12, false)
+		msg.Position = UDim2.new(0, 0, 0, 16)
+		msg.Size = UDim2.new(1, 0, 0, 0)
+		msg.AutomaticSize = Enum.AutomaticSize.Y
+		msg.TextWrapped = true
+		msg.TextTruncate = Enum.TextTruncate.None
+		msg.ZIndex = 302
+	end
+	paintRoles()
+	toast.BackgroundTransparency = 1
+	TweenService:Create(toast, TweenInfo.new(0.15), { BackgroundTransparency = THEME.main.t }):Play()
+	task.delay(1.5, function()
+		if toast and toast.Parent then
+			toast:Destroy()
+		end
+	end)
+end
+
+local shell = Instance.new("Frame")
+shell.Size = UDim2.fromOffset(860, 520)
+shell.Position = UDim2.new(0.5, -430, 0.5, -260)
+shell.BorderSizePixel = 0
+shell.Visible = false
+shell.ClipsDescendants = true
+shell.ZIndex = 50
+shell.Parent = gui
+track(shell, "bg", "background")
+corner(shell, 6)
+addStroke(shell, 2)
+
+local side = Instance.new("Frame")
+side.Size = UDim2.new(0, COLLAPSED_W, 1, 0)
+side.BorderSizePixel = 0
+side.ZIndex = 51
+side.ClipsDescendants = true
+side.Parent = shell
+track(side, "bg", "background")
+corner(side, 4)
+addStroke(side, 1.5)
+
+local logo = Instance.new("ImageLabel")
+logo.BackgroundTransparency = 1
+logo.Image = "rbxassetid://121679872034627"
+logo.Size = UDim2.fromOffset(48, 48)
+logo.Position = UDim2.new(0.5, -24, 0, 8)
+logo.ScaleType = Enum.ScaleType.Fit
+logo.ImageColor3 = Color3.new(1, 1, 1)
+logo.ImageTransparency = 0
+logo.ZIndex = 60
+logo.Parent = side
+
+local logoHit = Instance.new("TextButton")
+logoHit.Text = ""
+logoHit.BackgroundTransparency = 1
+logoHit.Size = UDim2.new(1, -8, 0, 52)
+logoHit.Position = UDim2.fromOffset(4, 6)
+logoHit.ZIndex = 61
+logoHit.Parent = side
+
+local content = Instance.new("Frame")
+content.BackgroundTransparency = 1
+content.Position = UDim2.fromOffset(COLLAPSED_W + 8, 8)
+content.Size = UDim2.new(1, -(COLLAPSED_W + 20), 1, -48)
+content.ZIndex = 52
+content.ClipsDescendants = true
+content.Parent = shell
+
+local resizeGrip = Instance.new("TextButton")
+resizeGrip.Text = "↘"
+resizeGrip.Font = Enum.Font.GothamBold
+resizeGrip.TextSize = 14
+resizeGrip.AutoButtonColor = false
+resizeGrip.BorderSizePixel = 0
+resizeGrip.Size = UDim2.fromOffset(20, 20)
+resizeGrip.Position = UDim2.new(1, -28, 1, -28)
+resizeGrip.ZIndex = 120
+resizeGrip.Parent = shell
+track(resizeGrip, "text", "accent")
+track(resizeGrip, "bg", "main")
+corner(resizeGrip, 6)
+addStroke(resizeGrip, 1.25)
+
+side:GetPropertyChangedSignal("Size"):Connect(function()
+	local w = side.Size.X.Offset
+	content.Position = UDim2.fromOffset(w + 8, 8)
+	content.Size = UDim2.new(1, -(w + 20), 1, -48)
+end)
+
+local pointer = nil
+on(UserInputService.InputChanged, function(input)
+	if not pointer or input.UserInputType ~= Enum.UserInputType.MouseMovement then
+		return
+	end
+	pointer(input.Position)
+end)
+on(UserInputService.InputEnded, function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		pointer = nil
+	end
+end)
+
+logoHit.InputBegan:Connect(function(input)
+	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+		return
+	end
+	local start = input.Position
+	local ox, oy = shell.Position.X.Offset, shell.Position.Y.Offset
+	pointer = function(pos)
+		local d = pos - start
+		shell.Position = UDim2.new(0.5, ox + d.X, 0.5, oy + d.Y)
+	end
+end)
+
+resizeGrip.InputBegan:Connect(function(input)
+	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+		return
+	end
+	local start = input.Position
+	local ow, oh = shell.Size.X.Offset, shell.Size.Y.Offset
+	pointer = function(pos)
+		local d = pos - start
+		shell.Size = UDim2.fromOffset(math.clamp(ow + d.X, 760, 1200), math.clamp(oh + d.Y, 460, 860))
+	end
+end)
+
+local closeDrop
+local closePicker
+local setSidebar
+local syncCards
+local noteSidebarHover
+local hoverSide = false
+local hoverGen = 0
+local refreshActive
+local rebuildPriority
+local rebuildWhitelist
+local currentPage = "Combat"
+
+local function buildUi()
+local userCard = Instance.new("Frame")
+userCard.Size = UDim2.fromOffset(48, 48)
+userCard.Position = UDim2.new(0.5, -24, 1, -58)
+userCard.BorderSizePixel = 0
+userCard.ZIndex = 62
+userCard.ClipsDescendants = true
+userCard.Parent = side
+track(userCard, "bg", "main")
+corner(userCard, 4)
+addStroke(userCard, 1.5)
+
+local avatar = Instance.new("ImageLabel")
+avatar.Size = UDim2.fromOffset(36, 36)
+avatar.Position = UDim2.fromOffset(6, 6)
+avatar.BorderSizePixel = 0
+avatar.ZIndex = 63
+avatar.Parent = userCard
+track(avatar, "bg", "background")
+corner(avatar, 3)
+avatar.Image = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. LP.UserId .. "&width=150&height=150&format=png"
+
+local nameL = textOf(userCard, LP.DisplayName, "font", 11, true)
+nameL.Position = UDim2.fromOffset(48, 6)
+nameL.Size = UDim2.new(1, -54, 0, 15)
+nameL.ZIndex = 63
+nameL.TextTruncate = Enum.TextTruncate.AtEnd
+nameL.Visible = false
+local userL = textOf(userCard, "@" .. LP.Name, "muted", 10, false)
+userL.Position = UDim2.fromOffset(48, 22)
+userL.Size = UDim2.new(1, -54, 0, 14)
+userL.ZIndex = 63
+userL.TextTruncate = Enum.TextTruncate.AtEnd
+userL.Visible = false
+local idL = textOf(userCard, tostring(LP.UserId), "muted", 10, false)
+idL.Position = UDim2.fromOffset(48, 38)
+idL.Size = UDim2.new(1, -54, 0, 14)
+idL.ZIndex = 63
+idL.TextTruncate = Enum.TextTruncate.AtEnd
+idL.Visible = false
+
+local watermark = textOf(gui, "KE - Beta", "accent", 15, true)
+watermark.Size = UDim2.fromOffset(140, 22)
+watermark.Position = UDim2.fromOffset(12, 8)
+watermark.ZIndex = 250
+watermark.Visible = PREFS.watermark
+
+local activeFrame = Instance.new("Frame")
+activeFrame.Size = UDim2.fromOffset(210, 0)
+activeFrame.AutomaticSize = Enum.AutomaticSize.Y
+activeFrame.Position = UDim2.fromOffset(16, 180)
+activeFrame.BorderSizePixel = 0
+activeFrame.ZIndex = 180
+activeFrame.Visible = PREFS.activeMenu
+activeFrame.Parent = gui
+track(activeFrame, "bg", "main")
+corner(activeFrame, 4)
+addStroke(activeFrame, 1.5)
+local activePad = Instance.new("UIPadding")
+activePad.PaddingBottom = UDim.new(0, 8)
+activePad.Parent = activeFrame
+
+local activeTitle = textOf(activeFrame, "Active Features", "accent", 14, true)
+activeTitle.Size = UDim2.new(1, -12, 0, 24)
+activeTitle.Position = UDim2.fromOffset(8, 4)
+activeTitle.ZIndex = 181
+activeTitle.Active = true
+
+activeTitle.InputBegan:Connect(function(input)
+	if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+		return
+	end
+	local start = input.Position
+	local ox, oy = activeFrame.Position.X.Offset, activeFrame.Position.Y.Offset
+	pointer = function(pos)
+		local d = pos - start
+		activeFrame.Position = UDim2.fromOffset(ox + d.X, oy + d.Y)
+	end
+end)
+
+local activeList = Instance.new("Frame")
+activeList.BackgroundTransparency = 1
+activeList.Position = UDim2.fromOffset(8, 28)
+activeList.Size = UDim2.new(1, -16, 0, 0)
+activeList.AutomaticSize = Enum.AutomaticSize.Y
+activeList.ZIndex = 181
+activeList.Parent = activeFrame
+local activeLay = Instance.new("UIListLayout")
+activeLay.Padding = UDim.new(0, 2)
+activeLay.SortOrder = Enum.SortOrder.LayoutOrder
+activeLay.Parent = activeList
+
+local activeSig = ""
+refreshActive = function()
+	activeFrame.Visible = PREFS.activeMenu
+	if not PREFS.activeMenu then
+		return
+	end
+	local lines = {}
+	if not selfAlive() then
+		lines[1] = "Inactive until respawn"
+		if CFG.usernameSpoof then
+			lines[#lines + 1] = "Username Spoof"
+		end
+	else
+		if featureOn(CFG.aimbot, CFG.aimbotMode, CFG.aimbotHeld) then
+			lines[#lines + 1] = string.format("[%s] Aimbot (%s)", prettyKey(CFG.aimbotBind), CFG.aimbotMode)
+		end
+		if featureOn(CFG.trigger, CFG.triggerMode, CFG.triggerHeld) then
+			lines[#lines + 1] = string.format("[%s] Triggerbot (%s)", prettyKey(CFG.triggerBind), CFG.triggerMode)
+		end
+		if CFG.voidActive then lines[#lines + 1] = "Void Spam" end
+		if CFG.orbitActive then lines[#lines + 1] = "Player Orbit" end
+		if CFG.translocate then lines[#lines + 1] = "Translocate" end
+		if CFG.evasionActive then lines[#lines + 1] = "Evasion" end
+		if CFG.rageSilent then lines[#lines + 1] = "Silent Rage" end
+		if CFG.noclip then lines[#lines + 1] = "Noclip" end
+		if CFG.speedwalk then lines[#lines + 1] = "Speedwalk" end
+		if CFG.flight then lines[#lines + 1] = "Flight" end
+		if CFG.antiAim then lines[#lines + 1] = "Anti Aim" end
+		if CFG.worldEnabled then lines[#lines + 1] = "World" end
+		if CFG.infDoubleJump then lines[#lines + 1] = "Infinite Double Jump" end
+		if CFG.doubleJumpMult > 1 then lines[#lines + 1] = string.format("Double Jump %.2gx", CFG.doubleJumpMult) end
+		if CFG.slideMult > 1 then lines[#lines + 1] = string.format("Slide %.2gx", CFG.slideMult) end
+		if CFG.customAnimEnabled then lines[#lines + 1] = "Emote: " .. CFG.customAnimName end
+		if CFG.usernameSpoof then lines[#lines + 1] = "Username Spoof" end
+		if #lines == 0 then
+			lines[1] = "None active"
+		end
+	end
+	local sig = table.concat(lines, "|")
+	if sig == activeSig then
+		return
+	end
+	activeSig = sig
+	for _, c in ipairs(activeList:GetChildren()) do
+		if c:IsA("TextLabel") then
+			c:Destroy()
+		end
+	end
+	for i, line in ipairs(lines) do
+		local l = textOf(activeList, line, (line == "None active" or line == "Inactive until respawn") and "muted" or "font", 12, false)
+		l.Size = UDim2.new(1, 0, 0, 16)
+		l.LayoutOrder = i
+		l.ZIndex = 182
+	end
+	paintRoles()
+end
+
+local pages = {}
+local navButtons = {}
+local navIcons = {}
+local navNames = {}
+local iconParts = {}
+local cardSyncs = {}
+
+syncCards = function()
+	for _, fn in ipairs(cardSyncs) do
+		fn()
+	end
+end
+
+local sideExpanded = false
+local sidebarTween, cardTween, avatarTween, logoTween
+setSidebar = function(expanded, force)
+	if not force and sideExpanded == expanded then
+		return
+	end
+	sideExpanded = expanded
+	local w = expanded and EXPANDED_W or COLLAPSED_W
+	if sidebarTween then
+		sidebarTween:Cancel()
+		sidebarTween = nil
+	end
+	if cardTween then
+		cardTween:Cancel()
+		cardTween = nil
+	end
+	if avatarTween then
+		avatarTween:Cancel()
+		avatarTween = nil
+	end
+	if logoTween then
+		logoTween:Cancel()
+		logoTween = nil
+	end
+	local goal = UDim2.new(0, w, 1, 0)
+	local cardSize, cardPos, avSize, avPos, logoSize, logoPos
+	if expanded then
+		cardSize = UDim2.new(1, -16, 0, 62)
+		cardPos = UDim2.new(0, 8, 1, -70)
+		avSize = UDim2.fromOffset(34, 34)
+		avPos = UDim2.fromOffset(8, 14)
+		logoSize = UDim2.fromOffset(48, 48)
+		logoPos = UDim2.fromOffset(10, 8)
+	else
+		cardSize = UDim2.fromOffset(48, 48)
+		cardPos = UDim2.new(0.5, -24, 1, -58)
+		avSize = UDim2.fromOffset(36, 36)
+		avPos = UDim2.fromOffset(6, 6)
+		logoSize = UDim2.fromOffset(48, 48)
+		logoPos = UDim2.new(0.5, -24, 0, 8)
+	end
+	local info = TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+	if force then
+		side.Size = goal
+		userCard.Size = cardSize
+		userCard.Position = cardPos
+		avatar.Size = avSize
+		avatar.Position = avPos
+		logo.Size = logoSize
+		logo.Position = logoPos
+	else
+		sidebarTween = TweenService:Create(side, info, { Size = goal })
+		sidebarTween:Play()
+		cardTween = TweenService:Create(userCard, info, { Size = cardSize, Position = cardPos })
+		cardTween:Play()
+		avatarTween = TweenService:Create(avatar, info, { Size = avSize, Position = avPos })
+		avatarTween:Play()
+		logoTween = TweenService:Create(logo, info, { Size = logoSize, Position = logoPos })
+		logoTween:Play()
+	end
+	for _, nl in pairs(navNames) do
+		nl.Visible = expanded
+	end
+	for _, ic in pairs(navIcons) do
+		ic.AnchorPoint = Vector2.new(0, 0.5)
+		ic.Size = UDim2.fromOffset(22, 22)
+		if expanded then
+			ic.Position = UDim2.new(0, 8, 0.5, 0)
+		else
+			ic.Position = UDim2.new(0.5, -11, 0.5, 0)
+		end
+	end
+	nameL.Visible = expanded
+	userL.Visible = expanded
+	idL.Visible = expanded
+end
+
+local function showPage(name, rebuild)
+	if closeDrop then
+		closeDrop()
+	end
+	currentPage = name
+	for n, f in pairs(pages) do
+		f.Visible = n == name
+	end
+	for n, b in pairs(navButtons) do
+		local onPage = n == name
+		b.BackgroundColor3 = THEME.main.c
+		b.BackgroundTransparency = onPage and THEME.main.t or 1
+		navNames[n].TextColor3 = onPage and THEME.accent.c or THEME.font.c:Lerp(THEME.background.c, 0.42)
+		navNames[n].TextTransparency = 0
+	end
+	if rebuild then
+		if name == "Ragebot" and rebuildPriority then
+			rebuildPriority()
+		elseif name == "Whitelist" and rebuildWhitelist then
+			rebuildWhitelist()
+		end
+	end
+	task.defer(syncCards)
+end
+
+local function iconPiece(parent, x, y, w, h, radius, strokeOnly)
+	local f = Instance.new("Frame")
+	f.BorderSizePixel = 0
+	f.AnchorPoint = Vector2.new(0.5, 0.5)
+	f.Position = UDim2.fromOffset(x, y)
+	f.Size = UDim2.fromOffset(w, h)
+	f.BackgroundTransparency = strokeOnly and 1 or 0
+	f.ZIndex = 56
+	f.Parent = parent
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, radius or 1)
+	c.Parent = f
+	local stroke
+	if strokeOnly then
+		stroke = Instance.new("UIStroke")
+		stroke.Thickness = 1.5
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+		stroke.Parent = f
+	end
+	iconParts[#iconParts + 1] = { obj = f, stroke = stroke }
+	return f
+end
+
+local function buildIcon(parent, kind)
+	local holder = Instance.new("Frame")
+	holder.Name = "Icon"
+	holder.BackgroundTransparency = 1
+	holder.Size = UDim2.fromOffset(22, 22)
+	holder.AnchorPoint = Vector2.new(0, 0.5)
+	holder.Position = UDim2.new(0, 8, 0.5, 0)
+	holder.ZIndex = 56
+	holder.Parent = parent
+	local function bar(x, y, w, h, radius, rot)
+		local f = iconPiece(holder, x, y, w, h, radius or 1, false)
+		if rot then
+			f.Rotation = rot
+		end
+		return f
+	end
+	local function outline(x, y, w, h, radius)
+		return iconPiece(holder, x, y, w, h, radius, true)
+	end
+	local function glyph(str)
+		local l = Instance.new("TextLabel")
+		l.BackgroundTransparency = 1
+		l.Size = UDim2.fromScale(1, 1)
+		l.Font = Enum.Font.GothamBold
+		l.TextSize = 12
+		l.TextXAlignment = Enum.TextXAlignment.Center
+		l.TextYAlignment = Enum.TextYAlignment.Center
+		l.Text = str
+		l.ZIndex = 57
+		l.Parent = holder
+		iconParts[#iconParts + 1] = { obj = l, text = true }
+		return l
+	end
+	if kind == "combat" then
+		bar(13, 8, 11, 3, 1)
+		bar(8, 11, 8, 4, 1)
+		bar(7, 16, 3, 6, 1)
+	elseif kind == "rage" then
+		outline(11, 13, 13, 11, 3)
+		bar(11, 5, 2, 4, 1)
+		bar(8, 13, 3, 3, 2)
+		bar(14, 13, 3, 3, 2)
+	elseif kind == "esp" then
+		outline(11, 11, 16, 9, 5)
+		bar(11, 11, 4, 4, 2)
+	elseif kind == "player" then
+		bar(8, 7, 5, 5, 3)
+		bar(8, 15, 8, 5, 2)
+		bar(15, 9, 4, 4, 2)
+		bar(15, 16, 6, 4, 2)
+	elseif kind == "world" then
+		outline(11, 11, 14, 14, 7)
+		bar(11, 11, 12, 2, 1)
+		bar(11, 11, 2, 12, 1)
+	elseif kind == "spoof" then
+		outline(11, 12, 14, 11, 5)
+		bar(8, 12, 3, 3, 2)
+		bar(14, 12, 3, 3, 2)
+	elseif kind == "check" then
+		bar(8, 13, 2, 6, 1, 42)
+		bar(13, 10, 2, 10, 1, -46)
+	elseif kind == "keys" then
+		outline(11, 11, 14, 14, 3)
+		glyph("F")
+	else
+		bar(11, 6, 13, 2, 1)
+		bar(11, 11, 13, 2, 1)
+		bar(11, 16, 13, 2, 1)
+		bar(6, 6, 4, 4, 2)
+		bar(15, 11, 4, 4, 2)
+		bar(9, 16, 4, 4, 2)
+	end
+	return holder
+end
+
+local navY = 68
+for _, item in ipairs(NAV) do
+	local name, icon = item[1], item[2]
+	local b = Instance.new("TextButton")
+	b.Text = ""
+	b.AutoButtonColor = false
+	b.Size = UDim2.new(1, -12, 0, 32)
+	b.Position = UDim2.fromOffset(6, navY)
+	b.BorderSizePixel = 0
+	b.BackgroundTransparency = 1
+	b.ZIndex = 55
+	b.Parent = side
+	corner(b, 4)
+	addStroke(b, 1.25)
+	local ic = buildIcon(b, icon)
+	local nl = Instance.new("TextLabel")
+	nl.BackgroundTransparency = 1
+	nl.Font = Enum.Font.Gotham
+	nl.TextSize = 13
+	nl.TextXAlignment = Enum.TextXAlignment.Left
+	nl.TextTruncate = Enum.TextTruncate.AtEnd
+	nl.Text = name
+	nl.Size = UDim2.new(1, -40, 1, 0)
+	nl.Position = UDim2.fromOffset(34, 0)
+	nl.ZIndex = 58
+	nl.Visible = false
+	nl.Parent = b
+	navButtons[name] = b
+	navIcons[name] = ic
+	navNames[name] = nl
+	b.MouseButton1Click:Connect(function()
+		showPage(name, true)
+	end)
+	navY += 36
+
+	local page = Instance.new("Frame")
+	page.BackgroundTransparency = 1
+	page.Size = UDim2.fromScale(1, 1)
+	page.Visible = false
+	page.ZIndex = 52
+	page.Parent = content
+	pages[name] = page
+end
+
+watch(function()
+	local tint = THEME.accent.c
+	for _, part in ipairs(iconParts) do
+		if part.obj and part.obj.Parent then
+			if part.text then
+				part.obj.TextColor3 = tint
+			elseif part.stroke then
+				part.stroke.Color = tint
+			else
+				part.obj.BackgroundColor3 = tint
+			end
+		end
+	end
+	for n, nl in pairs(navNames) do
+		local onPage = n == currentPage
+		nl.TextColor3 = onPage and THEME.accent.c or THEME.font.c:Lerp(THEME.background.c, 0.42)
+		nl.TextTransparency = 0
+	end
+	for n, b in pairs(navButtons) do
+		b.BackgroundColor3 = THEME.main.c
+		b.BackgroundTransparency = (n == currentPage) and THEME.main.t or 1
+	end
+end)
+
+local function sidebarContains(pos)
+	local ap, asz = side.AbsolutePosition, side.AbsoluteSize
+	return pos.X >= ap.X and pos.X <= ap.X + asz.X and pos.Y >= ap.Y and pos.Y <= ap.Y + asz.Y
+end
+noteSidebarHover = function(pos)
+	if not shell.Visible then
+		return
+	end
+	local inside = sidebarContains(pos)
+	if inside then
+		if not hoverSide then
+			hoverSide = true
+			hoverGen += 1
+			local gen = hoverGen
+			task.delay(0.125, function()
+				if hoverSide and gen == hoverGen and shell.Visible and not killed then
+					setSidebar(true, false)
+				end
+			end)
+		end
+	elseif hoverSide then
+		hoverSide = false
+		hoverGen += 1
+		setSidebar(false, false)
+	end
+end
+on(UserInputService.InputChanged, function(input)
+	if input.UserInputType ~= Enum.UserInputType.MouseMovement then
+		return
+	end
+	noteSidebarHover(input.Position)
+end)
+
+local function vscroll(parent)
+	local s = Instance.new("ScrollingFrame")
+	s.Size = UDim2.fromScale(1, 1)
+	s.BackgroundTransparency = 1
+	s.BorderSizePixel = 0
+	s.ScrollBarThickness = 0
+	s.ScrollingDirection = Enum.ScrollingDirection.Y
+	s.CanvasSize = UDim2.new()
+	s.AutomaticCanvasSize = Enum.AutomaticSize.None
+	s.ZIndex = 53
+	s.Parent = parent
+	local lay = Instance.new("UIListLayout")
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Padding = UDim.new(0, 8)
+	lay.Parent = s
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 2)
+	pad.PaddingBottom = UDim.new(0, 28)
+	pad.PaddingLeft = UDim.new(0, 2)
+	pad.PaddingRight = UDim.new(0, 6)
+	pad.Parent = s
+	local function syncScroll()
+		s.CanvasSize = UDim2.new(0, 0, 0, lay.AbsoluteContentSize.Y + 36)
+	end
+	lay:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(syncScroll)
+	cardSyncs[#cardSyncs + 1] = syncScroll
+	local n = 0
+	local function order()
+		n += 1
+		return n
+	end
+	return s, order
+end
+
+local function card(parent, pageOrder, title)
+	local f = Instance.new("Frame")
+	f.LayoutOrder = pageOrder()
+	f.Size = UDim2.new(1, -2, 0, 36)
+	f.AutomaticSize = Enum.AutomaticSize.None
+	f.BorderSizePixel = 0
+	f.ZIndex = 54
+	f.Parent = parent
+	track(f, "bg", "main")
+	corner(f, 4)
+	addStroke(f, 1.5)
+	local lay = Instance.new("UIListLayout")
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Padding = UDim.new(0, 6)
+	lay.Parent = f
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 8)
+	pad.PaddingBottom = UDim.new(0, 10)
+	pad.PaddingLeft = UDim.new(0, 12)
+	pad.PaddingRight = UDim.new(0, 12)
+	pad.Parent = f
+	local function sync()
+		local h = lay.AbsoluteContentSize.Y + 20
+		if h < 36 then
+			h = 36
+		end
+		f.Size = UDim2.new(1, -2, 0, h)
+	end
+	lay:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(sync)
+	cardSyncs[#cardSyncs + 1] = sync
+	local n = 0
+	local function order()
+		n += 1
+		return n
+	end
+	if title then
+		local h = textOf(f, title, "accent", 14, true)
+		h.LayoutOrder = order()
+		h.Size = UDim2.new(1, 0, 0, 20)
+		h.TextYAlignment = Enum.TextYAlignment.Center
+		h.ZIndex = 56
+	end
+	return f, order
+end
+
+local function hint(parent, order, str)
+	local l = textOf(parent, str, "muted", 10, false)
+	l.LayoutOrder = order()
+	l.Size = UDim2.new(1, 0, 0, 12)
+	l.ZIndex = 56
+	return l
+end
+local function makeToggle(parent, order, label, get, set)
+	local row = Instance.new("Frame")
+	row.BackgroundTransparency = 1
+	row.Size = UDim2.new(1, 0, 0, 24)
+	row.LayoutOrder = order()
+	row.ZIndex = 56
+	row.Parent = parent
+	local lab = textOf(row, label, "font", 13, false)
+	lab.Size = UDim2.new(1, -52, 1, 0)
+	lab.ZIndex = 57
+	local t = Instance.new("TextButton")
+	t.Text = ""
+	t.AutoButtonColor = false
+	t.Size = UDim2.fromOffset(40, 20)
+	t.Position = UDim2.new(1, -40, 0.5, -10)
+	t.BorderSizePixel = 0
+	t.ZIndex = 57
+	t.Parent = row
+	corner(t, 10)
+	addStroke(t, 1.25)
+	local knob = Instance.new("Frame")
+	knob.Size = UDim2.fromOffset(14, 14)
+	knob.BorderSizePixel = 0
+	knob.ZIndex = 58
+	knob.Parent = t
+	corner(knob, 7)
+	local function refresh()
+		local onState = get()
+		t.BackgroundColor3 = onState and THEME.accent.c or THEME.main.c
+		t.BackgroundTransparency = onState and THEME.accent.t or THEME.main.t
+		knob.Position = onState and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
+		knob.BackgroundColor3 = onState and THEME.background.c or THEME.font.c
+	end
+	watch(refresh)
+	t.MouseButton1Click:Connect(function()
+		set(not get())
+		refresh()
+	end)
+	return refresh
+end
+
+local function makeSlider(parent, order, label, minV, maxV, get, set, suffix, step)
+	local wrap = Instance.new("Frame")
+	wrap.BackgroundTransparency = 1
+	wrap.Size = UDim2.new(1, 0, 0, 34)
+	wrap.LayoutOrder = order()
+	wrap.ZIndex = 56
+	wrap.Parent = parent
+	local lab = textOf(wrap, label, "muted", 12, false)
+	lab.Size = UDim2.new(0.62, 0, 0, 14)
+	lab.ZIndex = 57
+	local val = textOf(wrap, "", "font", 12, false)
+	val.Size = UDim2.new(0.38, 0, 0, 14)
+	val.Position = UDim2.new(0.62, 0, 0, 0)
+	val.TextXAlignment = Enum.TextXAlignment.Right
+	val.ZIndex = 57
+	local bar = Instance.new("Frame")
+	bar.Size = UDim2.new(1, 0, 0, 6)
+	bar.Position = UDim2.fromOffset(0, 20)
+	bar.BorderSizePixel = 0
+	bar.ZIndex = 57
+	bar.Parent = wrap
+	track(bar, "bg", "background")
+	corner(bar, 3)
+	addStroke(bar, 1)
+	local fill = Instance.new("Frame")
+	fill.BorderSizePixel = 0
+	fill.ZIndex = 58
+	fill.Parent = bar
+	track(fill, "bg", "accent")
+	corner(fill, 3)
+	local function fmt(v)
+		local snapped = step and (math.floor(v / step + 0.5) * step) or v
+		local nearest = math.floor(snapped + 0.5)
+		if math.abs(snapped - nearest) < 0.001 then
+			return tostring(nearest)
+		end
+		return (string.format("%.2f", snapped):gsub("0+$", ""):gsub("%.$", ""))
+	end
+	local function show(v)
+		local r = math.clamp((v - minV) / math.max(maxV - minV, 0.001), 0, 1)
+		fill.Size = UDim2.new(r, 0, 1, 0)
+		val.Text = fmt(v) .. (suffix or "")
+	end
+	watch(function()
+		show(get())
+		fill.BackgroundColor3 = THEME.accent.c
+		fill.BackgroundTransparency = THEME.accent.t
+	end)
+	local function applyAt(x)
+		local r = math.clamp((x - bar.AbsolutePosition.X) / math.max(bar.AbsoluteSize.X, 1), 0, 1)
+		local v = minV + r * (maxV - minV)
+		if step then
+			v = math.floor(v / step + 0.5) * step
+		elseif maxV - minV > 20 then
+			v = math.floor(v + 0.5)
+		else
+			v = math.floor(v * 10 + 0.5) / 10
+		end
+		v = math.clamp(v, minV, maxV)
+		set(v)
+		show(v)
+	end
+	bar.InputBegan:Connect(function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+			return
+		end
+		applyAt(input.Position.X)
+		pointer = function(pos)
+			applyAt(pos.X)
+		end
+	end)
+end
+
+local function makeCycle(parent, order, label, options, get, set)
+	local row = Instance.new("Frame")
+	row.BackgroundTransparency = 1
+	row.Size = UDim2.new(1, 0, 0, 24)
+	row.LayoutOrder = order()
+	row.ZIndex = 56
+	row.Parent = parent
+	local lab = textOf(row, label, "font", 13, false)
+	lab.Size = UDim2.new(0.5, 0, 1, 0)
+	lab.ZIndex = 57
+	local b = Instance.new("TextButton")
+	b.AutoButtonColor = false
+	b.Font = Enum.Font.Gotham
+	b.TextSize = 12
+	b.Size = UDim2.fromOffset(120, 20)
+	b.Position = UDim2.new(1, -120, 0.5, -10)
+	b.BorderSizePixel = 0
+	b.ZIndex = 57
+	b.Parent = row
+	track(b, "bg", "background")
+	track(b, "text", "font")
+	corner(b, 4)
+	addStroke(b, 1.25)
+	watch(function()
+		local cur = get()
+		if not table.find(options, cur) then
+			cur = options[1]
+		end
+		b.Text = tostring(cur)
+	end)
+	b.MouseButton1Click:Connect(function()
+		local cur = get()
+		local idx = table.find(options, cur) or 0
+		idx = idx % #options + 1
+		set(options[idx])
+		b.Text = options[idx]
+	end)
+end
+
+local function makeBind(parent, order, label, get, set)
+	local row = Instance.new("Frame")
+	row.BackgroundTransparency = 1
+	row.Size = UDim2.new(1, 0, 0, 24)
+	row.LayoutOrder = order()
+	row.ZIndex = 56
+	row.Parent = parent
+	local lab = textOf(row, label, "font", 13, false)
+	lab.Size = UDim2.new(0.55, 0, 1, 0)
+	lab.ZIndex = 57
+	local b = Instance.new("TextButton")
+	b.AutoButtonColor = false
+	b.Font = Enum.Font.Gotham
+	b.TextSize = 12
+	b.Size = UDim2.fromOffset(110, 20)
+	b.Position = UDim2.new(1, -110, 0.5, -10)
+	b.BorderSizePixel = 0
+	b.ZIndex = 57
+	b.Parent = row
+	track(b, "bg", "background")
+	track(b, "text", "font")
+	corner(b, 4)
+	addStroke(b, 1.25)
+	local capt = false
+	watch(function()
+		if not capt then
+			b.Text = prettyKey(get())
+		end
+	end)
+	b.MouseButton1Click:Connect(function()
+		if capt then
+			return
+		end
+		capt = true
+		listening = true
+		b.Text = "..."
+		local conn
+		conn = UserInputService.InputBegan:Connect(function(input, gp)
+			if gp then
+				return
+			end
+			local name
+			if input.UserInputType == Enum.UserInputType.Keyboard then
+				name = input.KeyCode.Name
+			elseif input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2 then
+				name = input.UserInputType.Name
+			end
+			if not name then
+				return
+			end
+			set(name)
+			b.Text = prettyKey(name)
+			capt = false
+			listening = false
+			conn:Disconnect()
+		end)
+	end)
+end
+
+local function makeBox(parent, order, label, get, set, live)
+	local row = Instance.new("Frame")
+	row.BackgroundTransparency = 1
+	row.Size = UDim2.new(1, 0, 0, 44)
+	row.LayoutOrder = order()
+	row.ZIndex = 56
+	row.Parent = parent
+	local lab = textOf(row, label, "muted", 12, false)
+	lab.Size = UDim2.new(1, 0, 0, 14)
+	lab.ZIndex = 57
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(1, 0, 0, 24)
+	box.Position = UDim2.fromOffset(0, 18)
+	box.BorderSizePixel = 0
+	box.Font = Enum.Font.Gotham
+	box.TextSize = 13
+	box.ClearTextOnFocus = false
+	box.PlaceholderText = "..."
+	box.Text = get() or ""
+	box.ZIndex = 57
+	box.Parent = row
+	track(box, "bg", "background")
+	track(box, "text", "font")
+	corner(box, 4)
+	addStroke(box, 1.25)
+	local focused = false
+	box.Focused:Connect(function()
+		focused = true
+	end)
+	box.FocusLost:Connect(function()
+		focused = false
+		set(box.Text)
+	end)
+	if live ~= false then
+		watch(function()
+			if not focused then
+				box.Text = get() or ""
+			end
+		end)
+	end
+	return box
+end
+
+local openDrop
+
+local function makeDropdown(parent, order, label, getOptions, get, set)
+	local row = Instance.new("Frame")
+	row.BackgroundTransparency = 1
+	row.Size = UDim2.new(1, 0, 0, 24)
+	row.LayoutOrder = order()
+	row.ZIndex = 56
+	row.Parent = parent
+	local lab = textOf(row, label, "font", 13, false)
+	lab.Size = UDim2.new(0.4, 0, 1, 0)
+	lab.ZIndex = 57
+	local b = Instance.new("TextButton")
+	b.AutoButtonColor = false
+	b.Font = Enum.Font.Gotham
+	b.TextSize = 12
+	b.TextTruncate = Enum.TextTruncate.AtEnd
+	b.Size = UDim2.new(0.58, 0, 0, 22)
+	b.Position = UDim2.new(0.42, 0, 0.5, -11)
+	b.BorderSizePixel = 0
+	b.ZIndex = 57
+	b.Parent = row
+	track(b, "bg", "background")
+	track(b, "text", "font")
+	corner(b, 4)
+	addStroke(b, 1.25)
+	watch(function()
+		local v = get()
+		b.Text = (v and v ~= "") and v or "None"
+	end)
+	b.MouseButton1Click:Connect(function()
+		openDrop(b, getOptions, function(name)
+			set(name)
+			b.Text = name
+		end)
+	end)
+end
+
+local dropFrame
+local dropAnchor
+closeDrop = function()
+	if dropFrame then
+		dropFrame:Destroy()
+		dropFrame = nil
+	end
+	dropAnchor = nil
+end
+openDrop = function(anchor, getOptions, choose)
+	if dropFrame and dropAnchor == anchor then
+		closeDrop()
+		return
+	end
+	closeDrop()
+	local opts = getOptions() or {}
+	if #opts == 0 then
+		notify("List", "Nothing saved yet", "warning")
+		return
+	end
+	local rowH = 26
+	local h = math.min(#opts * rowH + 8, 180)
+	local w = math.max(anchor.AbsoluteSize.X, 168)
+	local origin = gui.AbsolutePosition
+	local vp = (workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize) or Vector2.new(1280, 720)
+	local x = anchor.AbsolutePosition.X - origin.X
+	local y = anchor.AbsolutePosition.Y - origin.Y + anchor.AbsoluteSize.Y + 4
+	if y + h > vp.Y - origin.Y - 8 then
+		y = anchor.AbsolutePosition.Y - origin.Y - h - 4
+	end
+	x = math.clamp(x, 4, math.max(4, vp.X - origin.X - w - 4))
+	y = math.clamp(y, 4, math.max(4, vp.Y - origin.Y - h - 4))
+	local f = Instance.new("Frame")
+	f.Size = UDim2.fromOffset(w, h)
+	f.Position = UDim2.fromOffset(x, y)
+	f.BorderSizePixel = 0
+	f.ZIndex = 450
+	f.BackgroundColor3 = THEME.background.c
+	f.BackgroundTransparency = THEME.background.t
+	f.ClipsDescendants = true
+	f.Parent = gui
+	corner(f, 4)
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 1.5
+	stroke.Color = THEME.outline.c
+	stroke.Transparency = math.clamp(THEME.outline.t, 0, 0.85)
+	stroke.Parent = f
+	local sc = Instance.new("ScrollingFrame")
+	sc.Size = UDim2.new(1, -8, 1, -8)
+	sc.Position = UDim2.fromOffset(4, 4)
+	sc.BackgroundTransparency = 1
+	sc.BorderSizePixel = 0
+	sc.ScrollBarThickness = 0
+	sc.CanvasSize = UDim2.new(0, 0, 0, #opts * rowH)
+	sc.ZIndex = 451
+	sc.Parent = f
+	local lay = Instance.new("UIListLayout")
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Parent = sc
+	local current = selectedConfig ~= "" and selectedConfig or selectedTheme
+	for i, name in ipairs(opts) do
+		local item = Instance.new("TextButton")
+		item.Text = name
+		item.Font = Enum.Font.Gotham
+		item.TextSize = 12
+		item.TextXAlignment = Enum.TextXAlignment.Left
+		item.AutoButtonColor = false
+		item.Size = UDim2.new(1, 0, 0, rowH)
+		item.BackgroundColor3 = THEME.main.c
+		item.BackgroundTransparency = name == current and THEME.main.t or 1
+		item.TextColor3 = name == current and THEME.accent.c or THEME.font.c
+		item.BorderSizePixel = 0
+		item.LayoutOrder = i
+		item.ZIndex = 452
+		item.Parent = sc
+		local pad = Instance.new("UIPadding")
+		pad.PaddingLeft = UDim.new(0, 8)
+		pad.Parent = item
+		corner(item, 4)
+		item.MouseButton1Click:Connect(function()
+			choose(name)
+			closeDrop()
+		end)
+	end
+	dropFrame = f
+	dropAnchor = anchor
+end
+
+on(UserInputService.InputBegan, function(input)
+	if not dropFrame or input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+		return
+	end
+	local p = input.Position
+	local function inside(obj)
+		if not obj or not obj.Parent then
+			return false
+		end
+		local ap, asz = obj.AbsolutePosition, obj.AbsoluteSize
+		return p.X >= ap.X and p.X <= ap.X + asz.X and p.Y >= ap.Y and p.Y <= ap.Y + asz.Y
+	end
+	if inside(dropFrame) or inside(dropAnchor) then
+		return
+	end
+	closeDrop()
+end)
+
+local picker
+
+local function hsvToRgb(h, s, v)
+	h = h % 1
+	local i = math.floor(h * 6)
+	local f = h * 6 - i
+	local p = v * (1 - s)
+	local q = v * (1 - f * s)
+	local t = v * (1 - (1 - f) * s)
+	i = i % 6
+	if i == 0 then return Color3.new(v, t, p)
+	elseif i == 1 then return Color3.new(q, v, p)
+	elseif i == 2 then return Color3.new(p, v, t)
+	elseif i == 3 then return Color3.new(p, q, v)
+	elseif i == 4 then return Color3.new(t, p, v)
+	else return Color3.new(v, p, q) end
+end
+
+local function rgbToHsv(c)
+	local r, g, b = c.R, c.G, c.B
+	local max = math.max(r, g, b)
+	local min = math.min(r, g, b)
+	local d = max - min
+	local h = 0
+	if d > 0 then
+		if max == r then h = ((g - b) / d) % 6
+		elseif max == g then h = (b - r) / d + 2
+		else h = (r - g) / d + 4 end
+		h = h / 6
+	end
+	local sat = max == 0 and 0 or d / max
+	return h, sat, max
+end
+
+local ROLE_LABEL = {
+	background = "BG",
+	main = "Main",
+	outline = "Line",
+	font = "Font",
+	accent = "Accent",
+}
+
+closePicker = function()
+	if picker then
+		picker:Destroy()
+		picker = nil
+	end
+end
+
+local function openPicker(startKey)
+	closePicker()
+	if dropFrame then
+		dropFrame:Destroy()
+		dropFrame = nil
+	end
+	local editing = startKey
+	local h, s, v = rgbToHsv(THEME[editing].c)
+	local alpha = THEME[editing].t or 0
+
+	local p = Instance.new("Frame")
+	p.Size = UDim2.fromOffset(262, 214)
+	p.BorderSizePixel = 0
+	p.ZIndex = 500
+	p.Active = true
+	p.BackgroundColor3 = Color3.fromRGB(10, 10, 12)
+	p.BackgroundTransparency = 0
+	p.Parent = gui
+	local sp = shell.AbsolutePosition
+	p.Position = UDim2.fromOffset(math.clamp(sp.X + 200, 8, 900), math.clamp(sp.Y + 48, 8, 500))
+	corner(p, 10)
+	local pst = Instance.new("UIStroke")
+	pst.Thickness = 1.5
+	pst.Color = THEME.outline.c
+	pst.Parent = p
+	picker = p
+
+	local checker = Instance.new("Frame")
+	checker.Size = UDim2.fromOffset(52, 52)
+	checker.Position = UDim2.fromOffset(12, 12)
+	checker.BorderSizePixel = 0
+	checker.BackgroundColor3 = Color3.fromRGB(210, 210, 210)
+	checker.ZIndex = 501
+	checker.Parent = p
+	corner(checker, 8)
+	local preview = Instance.new("Frame")
+	preview.Size = UDim2.fromScale(1, 1)
+	preview.BorderSizePixel = 0
+	preview.ZIndex = 502
+	preview.Parent = checker
+	corner(preview, 8)
+
+	local title = Instance.new("TextLabel")
+	title.BackgroundTransparency = 1
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 14
+	title.TextXAlignment = Enum.TextXAlignment.Left
+	title.Position = UDim2.fromOffset(74, 12)
+	title.Size = UDim2.new(1, -110, 0, 18)
+	title.ZIndex = 503
+	title.TextColor3 = THEME.font.c
+	title.Parent = p
+
+	local hex = Instance.new("TextLabel")
+	hex.BackgroundTransparency = 1
+	hex.Font = Enum.Font.Gotham
+	hex.TextSize = 11
+	hex.TextXAlignment = Enum.TextXAlignment.Left
+	hex.Position = UDim2.fromOffset(74, 32)
+	hex.Size = UDim2.new(1, -110, 0, 16)
+	hex.ZIndex = 503
+	hex.TextColor3 = THEME.font.c:Lerp(THEME.background.c, 0.35)
+	hex.Parent = p
+
+	local closeB = Instance.new("TextButton")
+	closeB.Text = "x"
+	closeB.Font = Enum.Font.GothamBold
+	closeB.TextSize = 14
+	closeB.Size = UDim2.fromOffset(22, 22)
+	closeB.Position = UDim2.new(1, -28, 0, 8)
+	closeB.BorderSizePixel = 0
+	closeB.ZIndex = 504
+	closeB.TextColor3 = Color3.new(1, 1, 1)
+	closeB.BackgroundColor3 = FIXED.danger
+	closeB.Parent = p
+	corner(closeB, 6)
+	closeB.MouseButton1Click:Connect(closePicker)
+
+	local chips = {}
+	local chipOrder = { "background", "main", "outline", "font", "accent" }
+	local function redraw() end
+	for i, key in ipairs(chipOrder) do
+		local chip = Instance.new("TextButton")
+		chip.Size = UDim2.fromOffset(44, 28)
+		chip.Position = UDim2.fromOffset(12 + (i - 1) * 48, 72)
+		chip.Text = ROLE_LABEL[key]
+		chip.Font = Enum.Font.Gotham
+		chip.TextSize = 10
+		chip.BorderSizePixel = 0
+		chip.ZIndex = 503
+		chip.AutoButtonColor = false
+		chip.Parent = p
+		corner(chip, 4)
+		local cs = Instance.new("UIStroke")
+		cs.Thickness = 1.5
+		cs.Parent = chip
+		chips[key] = { b = chip, s = cs }
+		chip.MouseButton1Click:Connect(function()
+			editing = key
+			h, s, v = rgbToHsv(THEME[key].c)
+			alpha = THEME[key].t or 0
+			redraw()
+		end)
+	end
+
+	local fills = {}
+	local function vslider(x, tag, getN, setN)
+		local track = Instance.new("TextButton")
+		track.Text = ""
+		track.AutoButtonColor = false
+		track.Size = UDim2.fromOffset(16, 100)
+		track.Position = UDim2.fromOffset(x, 108)
+		track.BorderSizePixel = 0
+		track.BackgroundColor3 = Color3.fromRGB(28, 28, 34)
+		track.ZIndex = 503
+		track.Parent = p
+		corner(track, 4)
+		local fill = Instance.new("Frame")
+		fill.BorderSizePixel = 0
+		fill.ZIndex = 504
+		fill.BackgroundColor3 = THEME.accent.c
+		fill.Parent = track
+		corner(fill, 4)
+		fills[tag] = { fill = fill, getN = getN }
+		local cap = Instance.new("TextLabel")
+		cap.BackgroundTransparency = 1
+		cap.Size = UDim2.fromOffset(16, 12)
+		cap.Position = UDim2.fromOffset(x, 96)
+		cap.Font = Enum.Font.Gotham
+		cap.TextSize = 10
+		cap.Text = tag
+		cap.TextColor3 = THEME.font.c
+		cap.ZIndex = 503
+		cap.Parent = p
+		local function at(y)
+			local r = math.clamp(1 - (y - track.AbsolutePosition.Y) / math.max(track.AbsoluteSize.Y, 1), 0, 1)
+			setN(r)
+			redraw()
+		end
+		track.InputBegan:Connect(function(input)
+			if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+				return
+			end
+			at(input.Position.Y)
+			pointer = function(pos)
+				at(pos.Y)
+			end
+		end)
+	end
+
+	redraw = function()
+		THEME[editing] = { c = hsvToRgb(h, s, v), t = alpha }
+		preview.BackgroundColor3 = THEME[editing].c
+		preview.BackgroundTransparency = alpha
+		title.Text = editing:sub(1, 1):upper() .. editing:sub(2) .. " Color"
+		local c = THEME[editing].c
+		hex.Text = string.format("#%02X%02X%02X   %d%% clear", math.floor(c.R * 255 + 0.5), math.floor(c.G * 255 + 0.5), math.floor(c.B * 255 + 0.5), math.floor(alpha * 100 + 0.5))
+		for key, info in pairs(chips) do
+			info.b.BackgroundColor3 = THEME[key].c
+			info.b.BackgroundTransparency = THEME[key].t
+			info.b.TextColor3 = THEME.font.c
+			info.s.Color = key == editing and THEME.accent.c or Color3.fromRGB(20, 20, 24)
+			info.s.Thickness = key == editing and 2 or 1
+		end
+		for _, info in pairs(fills) do
+			local n = info.getN()
+			info.fill.Size = UDim2.new(1, 0, n, 0)
+			info.fill.Position = UDim2.new(0, 0, 1 - n, 0)
+			info.fill.BackgroundColor3 = THEME.accent.c
+		end
+		repaint()
+		p.BackgroundTransparency = 0
+		title.TextColor3 = THEME.font.c
+		hex.TextColor3 = THEME.font.c:Lerp(Color3.new(0, 0, 0), 0.25)
+	end
+
+	vslider(196, "H", function() return h end, function(n) h = n end)
+	vslider(218, "S", function() return s end, function(n) s = n end)
+	vslider(240, "T", function() return alpha end, function(n) alpha = n end)
+
+	local grip = Instance.new("TextButton")
+	grip.Text = "↘"
+	grip.Font = Enum.Font.GothamBold
+	grip.TextSize = 14
+	grip.Size = UDim2.fromOffset(22, 22)
+	grip.Position = UDim2.new(0, 4, 1, -26)
+	grip.BackgroundTransparency = 1
+	grip.TextColor3 = THEME.accent.c
+	grip.ZIndex = 506
+	grip.Parent = p
+	grip.InputBegan:Connect(function(input)
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1 then
+			return
+		end
+		local start = input.Position
+		local ox, oy = p.Position.X.Offset, p.Position.Y.Offset
+		pointer = function(pos)
+			local d = pos - start
+			local nx = math.clamp(ox + d.X, 0, math.max(0, Camera.ViewportSize.X - 262))
+			local ny = math.clamp(oy + d.Y, 0, math.max(0, Camera.ViewportSize.Y - 214))
+			p.Position = UDim2.fromOffset(nx, ny)
+		end
+	end)
+
+	redraw()
+end
+
+local function makeColorRow(parent, order, label, key)
+	local row = Instance.new("Frame")
+	row.BackgroundTransparency = 1
+	row.Size = UDim2.new(1, 0, 0, 26)
+	row.LayoutOrder = order()
+	row.ZIndex = 56
+	row.Parent = parent
+	local lab = textOf(row, label, "font", 13, false)
+	lab.Size = UDim2.new(1, -40, 1, 0)
+	lab.ZIndex = 57
+	local sw = Instance.new("TextButton")
+	sw.Text = ""
+	sw.AutoButtonColor = false
+	sw.Size = UDim2.fromOffset(28, 20)
+	sw.Position = UDim2.new(1, -28, 0.5, -10)
+	sw.BorderSizePixel = 0
+	sw.ZIndex = 57
+	sw.Parent = row
+	corner(sw, 5)
+	addStroke(sw, 1.5)
+	watch(function()
+		sw.BackgroundColor3 = THEME[key].c
+		sw.BackgroundTransparency = THEME[key].t
+	end)
+	sw.MouseButton1Click:Connect(function()
+		if picker then
+			closePicker()
+		else
+			openPicker(key)
+		end
+	end)
+end
+
+local function buttonRow(parent, order, specs)
+	local row = Instance.new("Frame")
+	row.BackgroundTransparency = 1
+	row.Size = UDim2.new(1, 0, 0, 28)
+	row.LayoutOrder = order()
+	row.ZIndex = 56
+	row.Parent = parent
+	local n = #specs
+	for i, spec in ipairs(specs) do
+		local b = Instance.new("TextButton")
+		b.Text = spec[1]
+		b.Font = Enum.Font.GothamBold
+		b.TextSize = 12
+		b.AutoButtonColor = false
+		b.BorderSizePixel = 0
+		b.Size = UDim2.new(1 / n, -5, 1, 0)
+		b.Position = UDim2.new((i - 1) / n, 0, 0, 0)
+		b.ZIndex = 57
+		b.Parent = row
+		local role = spec[2]
+		track(b, "bg", role)
+		track(b, "text", "font")
+		corner(b, 4)
+		addStroke(b, 1.25)
+		b.MouseButton1Click:Connect(spec[3])
+	end
+	return row
+end
+
+local function cleanName(s)
+	return (s or ""):gsub("[^%w%-%_ ]", ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function fitList(frame, layout)
+	local function sync()
+		frame.Size = UDim2.new(1, 0, 0, layout.AbsoluteContentSize.Y)
+	end
+	layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(sync)
+	cardSyncs[#cardSyncs + 1] = sync
+end
+
+-- ====================== PAGES ======================
+local function buildCombatPage()
+	local sc, ord = vscroll(pages.Combat)
+	local aim, o = card(sc, ord, "Aimbot")
+	makeToggle(aim, o, "Enabled", function() return CFG.aimbot end, function(v) CFG.aimbot = v end)
+	makeBind(aim, o, "Bind", function() return CFG.aimbotBind end, function(v) CFG.aimbotBind = v end)
+	makeCycle(aim, o, "Mode", { "Hold", "Toggle" }, function() return CFG.aimbotMode end, function(v) CFG.aimbotMode = v end)
+	makeCycle(aim, o, "Aim Point", { "Head", "Torso" }, function() return CFG.aimPoint end, function(v) CFG.aimPoint = v end)
+	makeCycle(aim, o, "Style", { "Linear", "Spring", "Lock" }, function() return CFG.aimbotStyle end, function(v) CFG.aimbotStyle = v end)
+	makeSlider(aim, o, "Smoothing", 1, 100, function() return CFG.smoothing end, function(v) CFG.smoothing = v end, "%")
+	makeSlider(aim, o, "Switch Delay", 0, 300, function() return CFG.switchDelay end, function(v) CFG.switchDelay = v end, "ms")
+	makeToggle(aim, o, "Visible Check", function() return CFG.visibleCheck end, function(v) CFG.visibleCheck = v end)
+	makeToggle(aim, o, "FOV Circle", function() return CFG.fovOn end, function(v) CFG.fovOn = v end)
+	makeSlider(aim, o, "FOV Radius", 20, 800, function() return CFG.fovRadius end, function(v) CFG.fovRadius = v end, "px")
+
+	local trig, o2 = card(sc, ord, "Triggerbot")
+	makeToggle(trig, o2, "Enabled", function() return CFG.trigger end, function(v) CFG.trigger = v end)
+	makeBind(trig, o2, "Bind", function() return CFG.triggerBind end, function(v) CFG.triggerBind = v end)
+	makeCycle(trig, o2, "Mode", { "Hold", "Toggle", "Always" }, function() return CFG.triggerMode end, function(v) CFG.triggerMode = v end)
+	makeSlider(trig, o2, "Delay", 0, 300, function() return CFG.triggerDelay end, function(v) CFG.triggerDelay = v end, "ms")
+
+	local filters, o3 = card(sc, ord, "Filters")
+	hint(filters, o3, "Team and health.")
+	makeToggle(filters, o3, "Team Check", function() return CFG.teamCheck end, function(v) CFG.teamCheck = v end)
+	makeToggle(filters, o3, "Health Check", function() return CFG.healthCheck end, function(v) CFG.healthCheck = v end)
+end
+
+local function buildRagePage()
+	local sc, ord = vscroll(pages.Ragebot)
+	local view, ovw = card(sc, ord, "Client View")
+	hint(view, ovw, "Local body only.")
+	makeToggle(view, ovw, "Silent Rage", function() return CFG.rageSilent end, function(v) CFG.rageSilent = v end)
+
+	local target, o = card(sc, ord, "Targeting")
+	makeSlider(target, o, "Ignore Distance", 0, 2000, function() return CFG.ignoreDistance end, function(v) CFG.ignoreDistance = v end, " studs")
+	hint(target, o, "0 = off.")
+	local prio = textOf(target, "Priority: None", "accent", 12, false)
+	prio.LayoutOrder = o()
+	prio.Size = UDim2.new(1, 0, 0, 16)
+	prio.ZIndex = 56
+	watch(function()
+		local p = CFG.priorityUserId and Players:GetPlayerByUserId(CFG.priorityUserId)
+		prio.Text = p and ("Priority: " .. p.DisplayName) or "Priority: None"
+	end)
+
+	local list = Instance.new("Frame")
+	list.BackgroundTransparency = 1
+	list.Size = UDim2.new(1, 0, 0, 0)
+	list.LayoutOrder = o()
+	list.ZIndex = 56
+	list.Parent = target
+	local listLay = Instance.new("UIListLayout")
+	listLay.SortOrder = Enum.SortOrder.LayoutOrder
+	listLay.Padding = UDim.new(0, 4)
+	listLay.Parent = list
+	fitList(list, listLay)
+
+	local function clearPriority()
+		CFG.priorityUserId = nil
+		if rebuildPriority then
+			rebuildPriority()
+		end
+		repaint()
+	end
+	buttonRow(target, o, {
+		{ "Clear Priority", "danger", clearPriority },
+	})
+
+	rebuildPriority = function()
+		for _, c in ipairs(list:GetChildren()) do
+			if c:IsA("Frame") then
+				c:Destroy()
+			end
+		end
+		local i = 0
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= LP then
+				i += 1
+				local row = Instance.new("Frame")
+				row.Size = UDim2.new(1, 0, 0, 28)
+				row.LayoutOrder = i
+				row.BorderSizePixel = 0
+				row.ZIndex = 57
+				row.Parent = list
+				track(row, "bg", "background")
+				corner(row, 4)
+				addStroke(row, 1.15)
+				local lab = textOf(row, plr.DisplayName .. "  @" .. plr.Name, "font", 12, false)
+				lab.Position = UDim2.fromOffset(8, 0)
+				lab.Size = UDim2.new(1, -92, 1, 0)
+				lab.ZIndex = 58
+				local onP = CFG.priorityUserId == plr.UserId
+				local b = Instance.new("TextButton")
+				b.Text = onP and "Active" or "Set"
+				b.Font = Enum.Font.Gotham
+				b.TextSize = 12
+				b.Size = UDim2.fromOffset(70, 20)
+				b.Position = UDim2.new(1, -76, 0.5, -10)
+				b.BorderSizePixel = 0
+				b.AutoButtonColor = false
+				b.ZIndex = 58
+				b.Parent = row
+				track(b, "bg", onP and "accent" or "main")
+				track(b, "text", "font")
+				corner(b, 5)
+				local uid = plr.UserId
+				b.MouseButton1Click:Connect(function()
+					if CFG.priorityUserId == uid then
+						CFG.priorityUserId = nil
+					else
+						CFG.priorityUserId = uid
+					end
+					rebuildPriority()
+					repaint()
+				end)
+			end
+		end
+		repaint()
+		task.defer(syncCards)
+	end
+
+	local void, ov = card(sc, ord, "Void Spam")
+	makeToggle(void, ov, "Enabled", function() return CFG.voidActive end, function(v) CFG.voidActive = v end)
+	makeSlider(void, ov, "Min Range", 1000, 20000, function() return CFG.voidMinRange end, function(v) CFG.voidMinRange = v end, "")
+	makeSlider(void, ov, "Max Range", 1000, 20000, function() return CFG.voidMaxRange end, function(v) CFG.voidMaxRange = v end, "")
+	makeSlider(void, ov, "Hide Time", 0.1, 3, function() return CFG.voidHideTime end, function(v) CFG.voidHideTime = v end, "s")
+
+	local orbit, oo = card(sc, ord, "Player Orbit")
+	hint(orbit, oo, "Uses priority.")
+	makeToggle(orbit, oo, "Enabled", function() return CFG.orbitActive end, function(v) CFG.orbitActive = v end)
+	makeSlider(orbit, oo, "Speed", 0.1, 5, function() return CFG.orbitSpeed end, function(v) CFG.orbitSpeed = v end, "")
+	makeSlider(orbit, oo, "Distance", 1, 20, function() return CFG.orbitDist end, function(v) CFG.orbitDist = v end, "")
+	makeSlider(orbit, oo, "Min Height", 0, 30, function() return CFG.orbitMinY end, function(v) CFG.orbitMinY = v end, "")
+	makeSlider(orbit, oo, "Max Height", 0, 30, function() return CFG.orbitMaxY end, function(v) CFG.orbitMaxY = v end, "")
+	makeSlider(orbit, oo, "Show Time", 0.1, 3, function() return CFG.orbitShowTime end, function(v) CFG.orbitShowTime = v end, "s")
+
+	local trans, ot = card(sc, ord, "Translocate")
+	hint(trans, ot, "Enables noclip.")
+	makeToggle(trans, ot, "Enabled", function() return CFG.translocate end, function(v)
+		CFG.translocate = v
+		if v then
+			CFG.noclip = true
+			applyNoclip(true)
+			repaint()
+		end
+	end)
+	makeSlider(trans, ot, "Depth", 2, 30, function() return CFG.translocateDepth end, function(v) CFG.translocateDepth = v end, "")
+	makeSlider(trans, ot, "Above Time", 0.1, 3, function() return CFG.orbitAboveTime end, function(v) CFG.orbitAboveTime = v end, "s")
+	makeSlider(trans, ot, "Under Time", 0.1, 3, function() return CFG.translocateUnderTime end, function(v) CFG.translocateUnderTime = v end, "s")
+	makeSlider(trans, ot, "Void Hide Time", 0.1, 3, function() return CFG.transVoidHideTime end, function(v) CFG.transVoidHideTime = v end, "s")
+
+	local evade, oe = card(sc, ord, "Evasion")
+	makeToggle(evade, oe, "Enabled", function() return CFG.evasionActive end, function(v) CFG.evasionActive = v end)
+	makeSlider(evade, oe, "Min Distance", 10, 500, function() return CFG.evasionMinDist end, function(v) CFG.evasionMinDist = v end, "")
+	makeSlider(evade, oe, "Max Distance", 10, 500, function() return CFG.evasionMaxDist end, function(v) CFG.evasionMaxDist = v end, "")
+end
+
+local function buildEspPage()
+	local sc, ord = vscroll(pages.ESP)
+	local esp, o = card(sc, ord, "ESP")
+	makeToggle(esp, o, "Box", function() return CFG.espBox end, function(v) CFG.espBox = v end)
+	makeCycle(esp, o, "Box Type", { "2D", "Corner", "3D" }, function() return CFG.espType end, function(v) CFG.espType = v end)
+	makeToggle(esp, o, "Fill", function() return CFG.espFill end, function(v) CFG.espFill = v end)
+	makeToggle(esp, o, "Name", function() return CFG.espName end, function(v) CFG.espName = v end)
+	makeCycle(esp, o, "Name Mode", { "Display", "Username" }, function() return CFG.espNameMode end, function(v) CFG.espNameMode = v end)
+	makeToggle(esp, o, "Distance", function() return CFG.espDistance end, function(v) CFG.espDistance = v end)
+	makeToggle(esp, o, "Health", function() return CFG.espHealth end, function(v) CFG.espHealth = v end)
+	makeCycle(esp, o, "Health Mode", { "Bar", "Text" }, function() return CFG.espHealthMode end, function(v) CFG.espHealthMode = v end)
+end
+
+local function buildPlayerPage()
+	local sc, ord = vscroll(pages.Player)
+	local move, o = card(sc, ord, "Movement")
+	makeToggle(move, o, "Noclip", function() return CFG.noclip end, function(v)
+		if not v and CFG.translocate then
+			CFG.noclip = true
+			applyNoclip(true)
+			repaint()
+			return
+		end
+		CFG.noclip = v
+		applyNoclip(v)
+	end)
+	makeToggle(move, o, "Speedwalk", function() return CFG.speedwalk end, function(v)
+		if v and not CFG.speedwalk and hum then
+			baseSpeed = hum.WalkSpeed > 0 and hum.WalkSpeed or 16
+		end
+		CFG.speedwalk = v
+		if hum then
+			hum.WalkSpeed = v and CFG.speedValue or baseSpeed
+		end
+	end)
+	makeSlider(move, o, "Walk Speed", 16, 200, function() return CFG.speedValue end, function(v)
+		CFG.speedValue = v
+		if CFG.speedwalk and hum then
+			hum.WalkSpeed = v
+		end
+	end, "")
+	makeToggle(move, o, "Flight", function() return CFG.flight end, function(v) CFG.flight = v end)
+	makeSlider(move, o, "Flight Speed", 10, 300, function() return CFG.flightSpeed end, function(v) CFG.flightSpeed = v end, "")
+	makeToggle(move, o, "Infinite Double Jump", function() return CFG.infDoubleJump end, function(v) CFG.infDoubleJump = v end)
+	makeSlider(move, o, "Double Jump", 1, 10, function() return CFG.doubleJumpMult end, function(v) CFG.doubleJumpMult = v end, "x", 0.25)
+	makeSlider(move, o, "Slide Speed", 1, 10, function() return CFG.slideMult end, function(v) CFG.slideMult = v end, "x", 0.25)
+
+	local aa, oa = card(sc, ord, "Anti Aim")
+	makeToggle(aa, oa, "Enabled", function() return CFG.antiAim end, function(v) CFG.antiAim = v end)
+
+	local em, oe = card(sc, ord, "Custom Animation")
+		makeCycle(em, oe, "Animation", EMOTE_NAMES, function() return CFG.customAnimName end, function(v)
+		CFG.customAnimName = v
+		if CFG.customAnimEnabled then
+			playSelectedAnim()
+		end
+	end)
+	makeSlider(em, oe, "Speed", 0.25, 10, function() return CFG.animSpeed end, function(v)
+		CFG.animSpeed = v
+		if emoteTrack then
+			pcall(function()
+				emoteTrack:AdjustSpeed(v)
+			end)
+		end
+	end, "x", 0.25)
+	buttonRow(em, oe, {
+		{ "Play Animation", "success", function()
+			CFG.customAnimEnabled = true
+			playSelectedAnim()
+		end },
+		{ "Stop Animation", "danger", function()
+			CFG.customAnimEnabled = false
+			stopAnim()
+		end },
+	})
+end
+
+
+local function buildWorldPage()
+	local sc, ord = vscroll(pages.World)
+	local skyCard, os = card(sc, ord, "Skybox")
+	makeToggle(skyCard, os, "Enabled", function()
+		return CFG.worldEnabled
+	end, function(v)
+		CFG.worldEnabled = v
+		applyWorld()
+	end)
+	makeDropdown(skyCard, os, "Preset", function()
+		return SKY_NAMES
+	end, function()
+		return CFG.worldSky
+	end, function(name)
+		CFG.worldSky = name
+		if name ~= "Default" then
+			CFG.worldEnabled = true
+		end
+		applyWorld()
+		repaint()
+	end)
+	local amb, oa = card(sc, ord, "Ambience")
+	makeSlider(amb, oa, "Clock", 0, 24, function() return CFG.worldClock end, function(v)
+		CFG.worldClock = v
+		if CFG.worldEnabled then applyWorld() end
+	end, "h", 0.1)
+	makeSlider(amb, oa, "Brightness", 0, 10, function() return CFG.worldBrightness end, function(v)
+		CFG.worldBrightness = v
+		if CFG.worldEnabled then applyWorld() end
+	end, "", 0.1)
+	makeSlider(amb, oa, "Fog Start", 0, 2000, function() return CFG.worldFogStart end, function(v)
+		CFG.worldFogStart = v
+		if CFG.worldEnabled then applyWorld() end
+	end, "", 10)
+	makeSlider(amb, oa, "Fog End", 50, 100000, function() return CFG.worldFogEnd end, function(v)
+		CFG.worldFogEnd = v
+		if CFG.worldEnabled then applyWorld() end
+	end, "", 50)
+	local fx, ofx = card(sc, ord, "Color")
+	makeSlider(fx, ofx, "Saturation", -1, 1, function() return CFG.worldSaturation end, function(v)
+		CFG.worldSaturation = v
+		if CFG.worldEnabled then applyWorld() end
+	end, "", 0.05)
+	makeSlider(fx, ofx, "Contrast", -1, 1, function() return CFG.worldContrast end, function(v)
+		CFG.worldContrast = v
+		if CFG.worldEnabled then applyWorld() end
+	end, "", 0.05)
+end
+
+local function buildSpoofPage()
+	local sc, ord = vscroll(pages.Spoofer)
+	local sp, o = card(sc, ord, "Username Spoof")
+		makeToggle(sp, o, "Enabled", function() return CFG.usernameSpoof end, function(v)
+		CFG.usernameSpoof = v
+		if v then
+			spoofScanAt = 0
+			applySpoof()
+		else
+			restoreSpoof()
+		end
+	end)
+	makeBox(sp, o, "Your Name", function() return CFG.spoofSelfName end, function(v)
+		CFG.spoofSelfName = v
+		spoofScanAt = 0
+		if CFG.usernameSpoof then
+			applySpoof()
+		end
+	end)
+	makeBox(sp, o, "Enemy Name", function() return CFG.spoofEnemyName end, function(v)
+		CFG.spoofEnemyName = v
+		spoofScanAt = 0
+		if CFG.usernameSpoof then
+			applySpoof()
+		end
+	end)
+end
+
+local function buildKeybindsPage()
+	local sc, ord = vscroll(pages.Keybinds)
+	local kb, o = card(sc, ord, "Keybinds")
+		makeBind(kb, o, "Menu", function() return PREFS.menuKey end, function(v)
+		PREFS.menuKey = v
+		savePreferences()
+	end)
+	makeBind(kb, o, "Aimbot", function() return CFG.aimbotBind end, function(v) CFG.aimbotBind = v end)
+	makeBind(kb, o, "Triggerbot", function() return CFG.triggerBind end, function(v) CFG.triggerBind = v end)
+end
+
+local function buildWhitelistPage()
+	local page = pages.Whitelist
+	local left = Instance.new("Frame")
+	left.BackgroundTransparency = 1
+	left.Size = UDim2.new(0.56, -4, 1, 0)
+	left.ZIndex = 53
+	left.Parent = page
+	local right = Instance.new("Frame")
+	right.Size = UDim2.new(0.44, -4, 1, 0)
+	right.Position = UDim2.new(0.56, 8, 0, 0)
+	right.BorderSizePixel = 0
+	right.ZIndex = 53
+	right.Parent = page
+	track(right, "bg", "main")
+	corner(right, 4)
+	addStroke(right, 1.5)
+	local rh = textOf(right, "Whitelisted", "accent", 14, true)
+	rh.Position = UDim2.fromOffset(12, 10)
+	rh.Size = UDim2.new(1, -24, 0, 18)
+	rh.ZIndex = 54
+	local names = Instance.new("ScrollingFrame")
+	names.BackgroundTransparency = 1
+	names.Position = UDim2.fromOffset(12, 36)
+	names.Size = UDim2.new(1, -24, 1, -48)
+	names.BorderSizePixel = 0
+	names.ScrollBarThickness = 0
+	names.ScrollingDirection = Enum.ScrollingDirection.Y
+	names.CanvasSize = UDim2.new()
+	names.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	names.ZIndex = 54
+	names.Parent = right
+	local namesLay = Instance.new("UIListLayout")
+	namesLay.SortOrder = Enum.SortOrder.LayoutOrder
+	namesLay.Padding = UDim.new(0, 4)
+	namesLay.Parent = names
+	local empty = textOf(names, "Nobody is whitelisted.", "muted", 12, false)
+	empty.Size = UDim2.new(1, 0, 0, 32)
+	empty.TextWrapped = true
+	empty.TextTruncate = Enum.TextTruncate.None
+	empty.ZIndex = 55
+
+	local sc = Instance.new("ScrollingFrame")
+	sc.Size = UDim2.fromScale(1, 1)
+	sc.BackgroundTransparency = 1
+	sc.BorderSizePixel = 0
+	sc.ScrollBarThickness = 0
+	sc.ScrollingDirection = Enum.ScrollingDirection.Y
+	sc.CanvasSize = UDim2.new()
+	sc.AutomaticCanvasSize = Enum.AutomaticSize.Y
+	sc.ZIndex = 53
+	sc.Parent = left
+	local lay = Instance.new("UIListLayout")
+	lay.SortOrder = Enum.SortOrder.LayoutOrder
+	lay.Padding = UDim.new(0, 6)
+	lay.Parent = sc
+	lay:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		sc.CanvasSize = UDim2.new(0, 0, 0, lay.AbsoluteContentSize.Y + 8)
+	end)
+
+	local function playerLabel(plr)
+		local ok, text = pcall(function()
+			local dn = tostring(plr.DisplayName or plr.Name or "Player"):gsub("[%c]", " ")
+			local nm = tostring(plr.Name or "?"):gsub("[%c]", " ")
+			return dn .. "  @" .. nm
+		end)
+		return ok and text or "Player"
+	end
+
+	rebuildWhitelist = function()
+		if not sc.Parent then
+			return
+		end
+		for _, c in ipairs(sc:GetChildren()) do
+			if c:IsA("Frame") then
+				c:Destroy()
+			end
+		end
+		for _, c in ipairs(names:GetChildren()) do
+			if c ~= empty and not c:IsA("UIListLayout") then
+				c:Destroy()
+			end
+		end
+		local any = false
+		local ni = 0
+		for uid, label in pairs(whitelist) do
+			any = true
+			ni += 1
+			local b = Instance.new("TextButton")
+			b.Text = tostring(label)
+			b.Font = Enum.Font.Gotham
+			b.TextSize = 12
+			b.TextXAlignment = Enum.TextXAlignment.Left
+			b.AutoButtonColor = false
+			b.BackgroundTransparency = 1
+			b.Size = UDim2.new(1, 0, 0, 18)
+			b.LayoutOrder = ni
+			b.ZIndex = 55
+			b.Parent = names
+			track(b, "text", "font")
+			local id = uid
+			b.MouseButton1Click:Connect(function()
+				whitelist[id] = nil
+				rebuildWhitelist()
+			end)
+		end
+		empty.Visible = not any
+		local i = 0
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= LP and plr.Parent == Players then
+				i += 1
+				local onW = whitelist[plr.UserId] ~= nil
+				local row = Instance.new("Frame")
+				row.Size = UDim2.new(1, 0, 0, 32)
+				row.LayoutOrder = i
+				row.BorderSizePixel = 0
+				row.ZIndex = 54
+				row.Parent = sc
+				track(row, "bg", "main")
+				corner(row, 8)
+				addStroke(row, 1.25)
+				local lab = textOf(row, playerLabel(plr), "font", 12, false)
+				lab.Position = UDim2.fromOffset(8, 0)
+				lab.Size = UDim2.new(1, -96, 1, 0)
+				lab.ZIndex = 55
+				local b = Instance.new("TextButton")
+				b.Text = onW and "Remove" or "Add"
+				b.Font = Enum.Font.Gotham
+				b.TextSize = 12
+				b.AutoButtonColor = false
+				b.Size = UDim2.fromOffset(72, 22)
+				b.Position = UDim2.new(1, -80, 0.5, -11)
+				b.BorderSizePixel = 0
+				b.ZIndex = 55
+				b.Parent = row
+				track(b, "bg", onW and "danger" or "success")
+				track(b, "text", "font")
+				corner(b, 5)
+				local uid = plr.UserId
+				local shown = playerLabel(plr)
+				b.MouseButton1Click:Connect(function()
+					if whitelist[uid] then
+						whitelist[uid] = nil
+					else
+						whitelist[uid] = shown
+					end
+					rebuildWhitelist()
+				end)
+			end
+		end
+		task.defer(function()
+			if sc.Parent then
+				sc.CanvasSize = UDim2.new(0, 0, 0, lay.AbsoluteContentSize.Y + 12)
+			end
+		end)
+		repaint()
+	end
+end
+
+local function buildSettingsPage()
+	local sc, ord = vscroll(pages.Settings)
+
+	local pref, op = card(sc, ord, "Preferences")
+		makeToggle(pref, op, "Notifications", function() return PREFS.notifications end, function(v)
+		PREFS.notifications = v
+		savePreferences()
+	end)
+	makeToggle(pref, op, "Active Features", function() return PREFS.activeMenu end, function(v)
+		PREFS.activeMenu = v
+		activeFrame.Visible = v
+		activeSig = ""
+		savePreferences()
+	end)
+	makeToggle(pref, op, "Watermark", function() return PREFS.watermark end, function(v)
+		PREFS.watermark = v
+		watermark.Visible = v
+		savePreferences()
+	end)
+	makeBind(pref, op, "Menu Hotkey", function() return PREFS.menuKey end, function(v)
+		PREFS.menuKey = v
+		savePreferences()
+	end)
+	makeCycle(pref, op, "UI Font", UI_FONTS, function()
+		return PREFS.uiFont
+	end, function(v)
+		PREFS.uiFont = v
+		applyUiFont()
+		savePreferences()
+	end)
+	makeToggle(pref, op, "Bold", function()
+		return PREFS.uiBold
+	end, function(v)
+		PREFS.uiBold = v
+		applyUiFont()
+		savePreferences()
+	end)
+	makeToggle(pref, op, "Italic", function()
+		return PREFS.uiItalic
+	end, function(v)
+		PREFS.uiItalic = v
+		applyUiFont()
+		savePreferences()
+	end)
+	makeSlider(pref, op, "Font Size", 11, 18, function()
+		return PREFS.uiSize
+	end, function(v)
+		PREFS.uiSize = v
+		applyUiFont()
+		savePreferences()
+	end, "px", 1)
+
+	local community, oc = card(sc, ord, "Community")
+	buttonRow(community, oc, {
+		{ "Discord", "main", function()
+			if openLink(DISCORD_URL) then
+				notify("Discord", "Invite opened.", "accent")
+			else
+				notify("Discord", "Invite copied.", "accent")
+			end
+		end },
+	})
+
+	local theme, ot = card(sc, ord, "Theme")
+		makeColorRow(theme, ot, "Background Color", "background")
+	makeColorRow(theme, ot, "Main Color", "main")
+	makeColorRow(theme, ot, "Outline Color", "outline")
+	makeColorRow(theme, ot, "Font Color", "font")
+	makeColorRow(theme, ot, "Accent Color", "accent")
+	makeDropdown(theme, ot, "Theme", function()
+		return listJson(THEMES_DIR)
+	end, function()
+		return selectedTheme
+	end, function(name)
+		selectedTheme = name
+		local data = readJson(THEMES_DIR .. "/" .. name .. ".json")
+		if data and applyThemeData(data) then
+			repaint()
+			notify("Theme", "Loaded " .. name, "success")
+		else
+			notify("Theme", "Could not load " .. name, "danger")
+		end
+	end)
+	local themeBox = makeBox(theme, ot, "Theme Name", function() return "" end, function() end, false)
+	themeBox.PlaceholderText = "New theme name..."
+	buttonRow(theme, ot, {
+		{ "Save", "success", function()
+			local name = cleanName(themeBox.Text)
+			if name == "" then
+				notify("Theme", "Enter a name", "warning")
+				return
+			end
+			if writeJson(THEMES_DIR .. "/" .. name .. ".json", packTheme()) then
+				selectedTheme = name
+				themeBox.Text = ""
+				repaint()
+				notify("Theme", "Saved " .. name, "success")
+			end
+		end },
+		{ "Delete", "danger", function()
+			local name = selectedTheme ~= "" and selectedTheme or cleanName(themeBox.Text)
+			if name == "" then
+				return
+			end
+			removeFile(THEMES_DIR .. "/" .. name .. ".json")
+			if PREFS.autoTheme == name then
+				PREFS.autoTheme = ""
+				savePreferences()
+			end
+			if selectedTheme == name then
+				selectedTheme = ""
+			end
+			repaint()
+			notify("Theme", "Deleted " .. name, "danger")
+		end },
+		{ "Set Auto", "main", function()
+			local name = selectedTheme ~= "" and selectedTheme or cleanName(themeBox.Text)
+			if name == "" then
+				notify("Theme", "Select a theme first", "warning")
+				return
+			end
+			PREFS.autoTheme = name
+			savePreferences()
+			notify("Theme", "Auto-load " .. name, "success")
+		end },
+	})
+
+	local cfgCard, oc = card(sc, ord, "Config Profiles")
+		makeDropdown(cfgCard, oc, "Config", function()
+		return listJson(CONFIGS_DIR)
+	end, function()
+		return selectedConfig
+	end, function(name)
+		selectedConfig = name
+		local data = readJson(CONFIGS_DIR .. "/" .. name .. ".json")
+		if data and applyConfigData(data) then
+			syncRuntime()
+			repaint()
+			notify("Config", "Loaded " .. name, "success")
+		else
+			notify("Config", "Could not load " .. name, "danger")
+		end
+	end)
+	local cfgBox = makeBox(cfgCard, oc, "Config Name", function() return "" end, function() end, false)
+	cfgBox.PlaceholderText = "New config name..."
+	buttonRow(cfgCard, oc, {
+		{ "Save", "success", function()
+			local name = cleanName(cfgBox.Text)
+			if name == "" then
+				notify("Config", "Enter a name", "warning")
+				return
+			end
+			if writeJson(CONFIGS_DIR .. "/" .. name .. ".json", { version = 2, cfg = packConfig(), whitelist = packWhitelist() }) then
+				selectedConfig = name
+				cfgBox.Text = ""
+				repaint()
+				notify("Config", "Saved " .. name, "success")
+			end
+		end },
+		{ "Delete", "danger", function()
+			local name = selectedConfig ~= "" and selectedConfig or cleanName(cfgBox.Text)
+			if name == "" then
+				return
+			end
+			removeFile(CONFIGS_DIR .. "/" .. name .. ".json")
+			if PREFS.autoConfig == name then
+				PREFS.autoConfig = ""
+				savePreferences()
+			end
+			if selectedConfig == name then
+				selectedConfig = ""
+			end
+			repaint()
+			notify("Config", "Deleted " .. name, "danger")
+		end },
+		{ "Set Auto", "main", function()
+			local name = selectedConfig ~= "" and selectedConfig or cleanName(cfgBox.Text)
+			if name == "" then
+				notify("Config", "Select a config first", "warning")
+				return
+			end
+			PREFS.autoConfig = name
+			savePreferences()
+			notify("Config", "Auto-load " .. name, "success")
+		end },
+	})
+
+	local un, ou = card(sc, ord, "Script")
+	local unloadBtn = Instance.new("TextButton")
+	unloadBtn.LayoutOrder = ou()
+	unloadBtn.Text = "Unload Script"
+	unloadBtn.Font = Enum.Font.GothamBold
+	unloadBtn.TextSize = 14
+	unloadBtn.Size = UDim2.new(1, 0, 0, 34)
+	unloadBtn.BorderSizePixel = 0
+	unloadBtn.AutoButtonColor = false
+	unloadBtn.ZIndex = 57
+	unloadBtn.Parent = un
+	track(unloadBtn, "bg", "danger")
+	track(unloadBtn, "text", "font")
+	corner(unloadBtn, 8)
+	addStroke(unloadBtn, 1.5)
+	local unloadConfirm = false
+	local function unload()
+		if killed then
+			return
+		end
+		killed = true
+		CFG.noclip = false
+		CFG.translocate = false
+		applyNoclip(false)
+		CFG.speedwalk = false
+		CFG.flight = false
+		if hum then
+			hum.WalkSpeed = baseSpeed
+		end
+		restoreSpoof()
+		stopAnim()
+		pcall(function()
+			RunService:UnbindFromRenderStep("KE_Spoof")
+		end)
+		pcall(function()
+			RunService:UnbindFromRenderStep("KE_AimLock")
+		end)
+		pcall(function()
+			RunService:UnbindFromRenderStep("KE_Emote")
+		end)
+		pcall(function()
+			RunService:UnbindFromRenderStep("KE_GhostCam")
+		end)
+		if clearGhost then
+			clearGhost(false)
+		end
+		if aimCircle then
+			pcall(function() aimCircle:Remove() end)
+			pcall(function() aimCircle:Destroy() end)
+			aimCircle = nil
+		end
+		if clearPool then
+			clearPool()
+		end
+		for _, c in ipairs(bin) do
+			pcall(function()
+				c:Disconnect()
+			end)
+		end
+		gui:Destroy()
+	end
+	unloadBtn.MouseButton1Click:Connect(function()
+		if not unloadConfirm then
+			unloadConfirm = true
+			unloadBtn.Text = "Are you sure?"
+			task.delay(3, function()
+				if unloadConfirm and unloadBtn.Parent then
+					unloadConfirm = false
+					unloadBtn.Text = "Unload Script"
+				end
+			end)
+		else
+			unload()
+		end
+	end)
+end
+
+buildCombatPage()
+buildRagePage()
+buildEspPage()
+buildPlayerPage()
+buildWorldPage()
+buildSpoofPage()
+buildKeybindsPage()
+buildWhitelistPage()
+buildSettingsPage()
+
+setSidebar(false, true)
+applyUiFont()
+showPage("Combat", true)
+if rebuildPriority then
+	rebuildPriority()
+end
+if rebuildWhitelist then
+	rebuildWhitelist()
+end
+
+loadPreferences()
+selectedConfig = PREFS.autoConfig or ""
+selectedTheme = PREFS.autoTheme or ""
+watermark.Visible = PREFS.watermark
+activeFrame.Visible = PREFS.activeMenu
+if PREFS.autoConfig ~= "" then
+	local data = readJson(CONFIGS_DIR .. "/" .. PREFS.autoConfig .. ".json")
+	if data then
+		applyConfigData(data)
+	end
+end
+if PREFS.autoTheme ~= "" then
+	local data = readJson(THEMES_DIR .. "/" .. PREFS.autoTheme .. ".json")
+	if data then
+		applyThemeData(data)
+	end
+end
+coerceAimbotMode()
+syncRuntime()
+repaint()
+if rebuildPriority then
+	rebuildPriority()
+end
+task.defer(syncCards)
+if not PREFS.discordPrompted then
+	PREFS.discordPrompted = true
+	savePreferences()
+	task.delay(0.6, function()
+		if killed then
+			return
+		end
+		if openLink(DISCORD_URL) then
+			notify("Discord", "Invite opened. This only happens once.", "accent")
+		else
+			notify("Discord", "Invite copied. This only happens once.", "accent")
+		end
+	end)
+end
+task.spawn(function()
+	if killed then
+		return
+	end
+	local pos = shell.Position
+	local parked = UDim2.fromOffset(-6000, -6000)
+	if not shell.Visible then
+		shell.Position = parked
+		shell.Visible = true
+	end
+	RunService.Heartbeat:Wait()
+	syncCards()
+	RunService.Heartbeat:Wait()
+	syncCards()
+	if shell.Parent and shell.Position == parked then
+		shell.Position = pos
+	end
+	if not uiOpen and shell.Parent then
+		shell.Visible = false
+	end
+end)
+end
+buildUi()
+
+-- ====================== DRAW + COMBAT ======================
+local function startRuntime()
+if Drawing then
+	aimCircle = Drawing.new("Circle")
+	aimCircle.Filled = false
+	aimCircle.Thickness = 1.4
+	aimCircle.NumSides = 64
+	aimCircle.Visible = false
+end
+
+local HAS_DRAW = Drawing ~= nil
+local pool = {}
+
+local function drawObj(kind)
+	if not HAS_DRAW then
+		return nil
+	end
+	local o = Drawing.new(kind)
+	o.Visible = false
+	return o
+end
+
+local function ensurePool(uid)
+	local p = pool[uid]
+	if p then
+		return p
+	end
+	p = {
+		box = drawObj("Square"),
+		fill = drawObj("Square"),
+		name = drawObj("Text"),
+		dist = drawObj("Text"),
+		hpBg = drawObj("Square"),
+		hp = drawObj("Square"),
+		hpTx = drawObj("Text"),
+		corners = {},
+		edges = {},
+	}
+	if HAS_DRAW then
+		for i = 1, 8 do p.corners[i] = drawObj("Line") end
+		for i = 1, 12 do p.edges[i] = drawObj("Line") end
+		if p.box then p.box.Filled = false p.box.Thickness = 1.4 end
+		if p.fill then p.fill.Filled = true p.fill.Transparency = 0.82 end
+		if p.name then p.name.Size = 13 p.name.Center = true p.name.Outline = true end
+		if p.dist then p.dist.Size = 12 p.dist.Center = true p.dist.Outline = true end
+		if p.hpTx then p.hpTx.Size = 16 p.hpTx.Outline = true end
+		if p.hpBg then p.hpBg.Filled = true p.hpBg.Color = Color3.fromRGB(20, 20, 20) end
+		if p.hp then p.hp.Filled = true p.hp.Color = Color3.fromRGB(80, 220, 120) end
+	end
+	pool[uid] = p
+	return p
+end
+
+local function hidePool(p)
+	if not p then
+		return
+	end
+	local function off(o)
+		if o then
+			o.Visible = false
+		end
+	end
+	off(p.box) off(p.fill) off(p.name) off(p.dist) off(p.hpBg) off(p.hp) off(p.hpTx)
+	for _, o in ipairs(p.corners) do off(o) end
+	for _, o in ipairs(p.edges) do off(o) end
+end
+
+local function wipeDraw(o)
+	if not o then
+		return
+	end
+	pcall(function() o.Visible = false end)
+	pcall(function() o:Remove() end)
+	pcall(function() o:Destroy() end)
+end
+
+function clearPool()
+	for _, p in pairs(pool) do
+		wipeDraw(p.box) wipeDraw(p.fill) wipeDraw(p.name) wipeDraw(p.dist)
+		wipeDraw(p.hpBg) wipeDraw(p.hp) wipeDraw(p.hpTx)
+		for _, o in ipairs(p.corners) do wipeDraw(o) end
+		for _, o in ipairs(p.edges) do wipeDraw(o) end
+	end
+	pool = {}
+end
+
+local function line(o, a, b, color)
+	if not o then
+		return
+	end
+	o.From = a
+	o.To = b
+	o.Color = color
+	o.Thickness = 1.5
+	o.Visible = true
+end
+
+local currentLockPart, potentialTarget, potentialEnterTime
+local springStart = 0
+local triggerDetectTime = 0
+
+local function clickMouse()
+	pcall(function()
+		mouse1click()
+	end)
+end
+
+local function moveMouse(x, y)
+	pcall(function()
+		mousemoverel(x, y)
+	end)
+end
+
+local savedNeck, savedNeckC0
+on(RunService.Heartbeat, function()
+	if killed or not selfAlive() then
+		return
+	end
+	if (CFG.noclip or CFG.translocate) and char then
+		for _, part in ipairs(char:GetDescendants()) do
+			if part:IsA("BasePart") and part.CanCollide then
+				if collideState[part] == nil then
+					collideState[part] = true
+				end
+				part.CanCollide = false
+			end
+		end
+	end
+	if CFG.speedwalk and hum and hrp then
+		hum.WalkSpeed = CFG.speedValue
+		local moveDir = hum.MoveDirection
+		if moveDir.Magnitude > 0.05 then
+			local vel = hrp.AssemblyLinearVelocity
+			hrp.AssemblyLinearVelocity = Vector3.new(moveDir.X * CFG.speedValue, vel.Y, moveDir.Z * CFG.speedValue)
+		end
+	end
+	if CFG.flight and hrp then
+		local dir = Vector3.zero
+		local look = Camera.CFrame.LookVector
+		local right = Camera.CFrame.RightVector
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir += look end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir -= look end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir -= right end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir += right end
+		local vy = 0
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vy = CFG.flightSpeed end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then vy = -CFG.flightSpeed end
+		if dir.Magnitude > 0 then
+			dir = Vector3.new(dir.X, 0, dir.Z).Unit * CFG.flightSpeed
+		end
+		hrp.AssemblyLinearVelocity = Vector3.new(dir.X, vy ~= 0 and vy or 0, dir.Z)
+	elseif slideHeld and CFG.slideMult > 1 and hrp then
+		local v = hrp.AssemblyLinearVelocity
+		local flat = Vector3.new(v.X, 0, v.Z)
+		if flat.Magnitude > 10 then
+			if not slideBase then
+				slideBase = flat.Magnitude
+			end
+			local dir = flat.Unit
+			local spd = slideBase * CFG.slideMult
+			hrp.AssemblyLinearVelocity = Vector3.new(dir.X * spd, v.Y, dir.Z * spd)
+		end
+	end
+	if CFG.antiAim and char and hrp then
+		local upper = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+		local neck = upper and (upper:FindFirstChild("Neck") or upper:FindFirstChild("neck"))
+		local head = char:FindFirstChild("Head")
+		if neck and neck:IsA("Motor6D") then
+			if savedNeck ~= neck then
+				savedNeck = neck
+				savedNeckC0 = neck.C0
+			end
+			neck.C0 = CFrame.new(0, -1.7, 0.15) * CFrame.Angles(math.rad(89), tick() * 22, 0)
+		end
+		if head and head:IsA("BasePart") then
+			head.CanCollide = false
+			head.AssemblyLinearVelocity = Vector3.zero
+			head.AssemblyAngularVelocity = Vector3.zero
+			head.CFrame = hrp.CFrame * CFrame.new(0, -3.1, 0) * CFrame.Angles(math.rad(90), tick() * 22, 0)
+		end
+	elseif savedNeck and savedNeck.Parent and savedNeckC0 then
+		pcall(function()
+			savedNeck.C0 = savedNeckC0
+		end)
+		savedNeck = nil
+		savedNeckC0 = nil
+	end
+end)
+
+local isVoidingFar = false
+local comboPhase, comboPhaseStart = "void", tick()
+local vtPhase, vtPhaseStart = "void", tick()
+local otPhase, otPhaseStart = "orbit", tick()
+
+task.spawn(function()
+	while not killed do
+		local now = tick()
+		if CFG.voidActive and CFG.orbitActive then
+			local elapsed = now - comboPhaseStart
+			if comboPhase == "void" and elapsed >= CFG.voidHideTime then
+				comboPhase = "orbit"
+				comboPhaseStart = now
+				isVoidingFar = false
+			elseif comboPhase == "orbit" and elapsed >= CFG.orbitShowTime then
+				comboPhase = "void"
+				comboPhaseStart = now
+			end
+		else
+			comboPhase = "void"
+			comboPhaseStart = now
+		end
+		if CFG.voidActive and CFG.translocate then
+			local elapsed = now - vtPhaseStart
+			if vtPhase == "void" and elapsed >= CFG.transVoidHideTime then
+				vtPhase = "translocate"
+				vtPhaseStart = now
+				isVoidingFar = false
+			elseif vtPhase == "translocate" and elapsed >= CFG.translocateUnderTime then
+				vtPhase = "void"
+				vtPhaseStart = now
+			end
+		else
+			vtPhase = "void"
+			vtPhaseStart = now
+		end
+		if CFG.orbitActive and CFG.translocate then
+			local elapsed = now - otPhaseStart
+			if otPhase == "orbit" and elapsed >= CFG.orbitAboveTime then
+				otPhase = "translocate"
+				otPhaseStart = now
+			elseif otPhase == "translocate" and elapsed >= CFG.translocateUnderTime then
+				otPhase = "orbit"
+				otPhaseStart = now
+			end
+		else
+			otPhase = "orbit"
+			otPhaseStart = now
+		end
+		task.wait(0.03)
+	end
+end)
+
+task.spawn(function()
+	while not killed do
+		local allowVoid = CFG.voidActive and (
+			(not CFG.orbitActive and not CFG.translocate)
+			or (CFG.orbitActive and comboPhase == "void")
+			or (CFG.translocate and not CFG.orbitActive and vtPhase == "void")
+			or (CFG.orbitActive and CFG.translocate and comboPhase == "void" and vtPhase == "void")
+		)
+		if allowVoid and selfAlive() then
+			isVoidingFar = true
+			local minR = math.min(CFG.voidMinRange, CFG.voidMaxRange)
+			local maxR = math.max(CFG.voidMinRange, CFG.voidMaxRange)
+			local r = minR + math.random() * (maxR - minR)
+			local theta = math.random() * math.pi * 2
+			local phi = (math.random() - 0.5) * math.pi * 0.85
+			hrp.CFrame = CFrame.new(
+				r * math.cos(phi) * math.cos(theta),
+				math.abs(r * math.sin(phi)) + minR * 0.05,
+				r * math.cos(phi) * math.sin(theta)
+			)
+			task.wait(0.015 + math.random() * 0.025)
+			isVoidingFar = false
+		else
+			task.wait(0.04)
+		end
+	end
+end)
+
+task.spawn(function()
+	local angle = 0
+	while not killed do
+		local allowOrbit = CFG.orbitActive and (not CFG.voidActive or comboPhase == "orbit") and (not CFG.translocate or otPhase == "orbit")
+		if allowOrbit and selfAlive() and not isVoidingFar then
+			local target = getTargetCharacter()
+			local thrp = target and target:FindFirstChild("HumanoidRootPart")
+			if thrp then
+				angle += CFG.orbitSpeed * 1.8
+				local height = CFG.orbitMinY + (CFG.orbitMaxY - CFG.orbitMinY) * (0.5 + 0.5 * math.sin(tick() * 2.2))
+				local dist = CFG.orbitDist * (0.9 + 0.1 * math.sin(tick() * 1.4))
+				hrp.CFrame = thrp.CFrame * CFrame.Angles(0, angle, 0) * CFrame.new(0, height, dist)
+			end
+		end
+		RunService.Heartbeat:Wait()
+	end
+end)
+
+task.spawn(function()
+	local evadeAngle = math.random() * math.pi * 2
+	local evadeDist = (CFG.evasionMinDist + CFG.evasionMaxDist) * 0.5
+	local evadeHeight = 4
+	local nextReroll = 0
+	while not killed do
+		if CFG.evasionActive and selfAlive() and not isVoidingFar then
+			local target = getTargetCharacter()
+			local thrp = target and target:FindFirstChild("HumanoidRootPart")
+			if thrp then
+				local now = tick()
+				if now >= nextReroll then
+					evadeAngle = math.random() * math.pi * 2
+					local minD = math.min(CFG.evasionMinDist, CFG.evasionMaxDist)
+					local maxD = math.max(CFG.evasionMinDist, CFG.evasionMaxDist)
+					evadeDist = minD + math.random() * (maxD - minD)
+					evadeHeight = (math.random() - 0.3) * 18
+					nextReroll = now + 0.2 + math.random() * 0.3
+				end
+				evadeAngle += 0.05
+				hrp.CFrame = CFrame.new(thrp.Position + Vector3.new(math.cos(evadeAngle) * evadeDist, evadeHeight, math.sin(evadeAngle) * evadeDist))
+			end
+		end
+		RunService.Heartbeat:Wait()
+	end
+end)
+
+local translocateWasOn = false
+task.spawn(function()
+	local rayParams = RaycastParams.new()
+	rayParams.FilterType = Enum.RaycastFilterType.Exclude
+	while not killed do
+		local allow = CFG.translocate and (
+			(not CFG.orbitActive and not CFG.voidActive)
+			or (CFG.orbitActive and not CFG.voidActive and otPhase == "translocate")
+			or (CFG.voidActive and not CFG.orbitActive and vtPhase == "translocate")
+			or (CFG.orbitActive and CFG.voidActive and otPhase == "translocate" and vtPhase == "translocate")
+		)
+		if allow and selfAlive() then
+			if not CFG.noclip then
+				CFG.noclip = true
+				repaint()
+			end
+			applyNoclip(true)
+			translocateWasOn = true
+			if not isVoidingFar then
+				local depth = math.clamp(CFG.translocateDepth, 2, 30)
+				local target = getTargetCharacter()
+				local thrp = target and target:FindFirstChild("HumanoidRootPart")
+				if thrp then
+					rayParams.FilterDescendantsInstances = { char, target }
+					local hit = workspace:Raycast(thrp.Position + Vector3.new(0, 4, 0), Vector3.new(0, -60, 0), rayParams)
+					local pos = hit and Vector3.new(thrp.Position.X, hit.Position.Y - depth, thrp.Position.Z) or (thrp.Position - Vector3.new(0, depth, 0))
+					hrp.CFrame = CFrame.new(pos)
+					hrp.AssemblyLinearVelocity = Vector3.zero
+				end
+			end
+		elseif translocateWasOn and not CFG.translocate then
+			translocateWasOn = false
+		end
+		RunService.Heartbeat:Wait()
+	end
+end)
+
+on(RunService.RenderStepped, function()
+	if killed then
+		return
+	end
+	Camera = workspace.CurrentCamera
+	if not Camera then
+		return
+	end
+	local center = Camera.ViewportSize / 2
+	if aimCircle then
+		aimCircle.Position = center
+		aimCircle.Radius = CFG.fovRadius
+		aimCircle.Color = THEME.accent.c
+		aimCircle.Visible = CFG.fovOn and not uiOpen
+	end
+
+	if selfAlive() and featureOn(CFG.aimbot, CFG.aimbotMode, CFG.aimbotHeld) then
+		local now = tick()
+		local pointMode = CFG.aimbotStyle == "Lock" and "Head" or CFG.aimPoint
+		local part = pickTarget(CFG.fovRadius, pointMode, CFG.visibleCheck)
+		if part then
+			if CFG.aimbotStyle == "Lock" then
+				currentLockPart = part
+				potentialTarget = part
+				potentialEnterTime = now
+			else
+				if potentialTarget ~= part then
+					potentialTarget = part
+					potentialEnterTime = now
+				end
+				if (now - potentialEnterTime) * 1000 >= CFG.switchDelay then
+					currentLockPart = part
+				else
+					currentLockPart = nil
+				end
+			end
+		elseif CFG.aimbotStyle == "Lock" and currentLockPart and currentLockPart.Parent then
+			local model = currentLockPart:FindFirstAncestorOfClass("Model")
+			local plr = model and Players:GetPlayerFromCharacter(model)
+			local head = model and (model:FindFirstChild("Head") or model:FindFirstChild("HumanoidRootPart"))
+			if plr and alive(plr) and not skipped(plr) and head then
+				currentLockPart = head
+			else
+				currentLockPart = nil
+			end
+		else
+			potentialTarget = nil
+			currentLockPart = nil
+		end
+		if CFG.aimbotStyle ~= "Lock" and currentLockPart and currentLockPart.Parent then
+			local v, onScreen = Camera:WorldToViewportPoint(currentLockPart.Position)
+			if onScreen and v.Z > 0 then
+				local dx, dy = v.X - center.X, v.Y - center.Y
+				if CFG.aimbotStyle == "Spring" then
+					if springStart == 0 then
+						springStart = now
+					end
+					local t = 0.04 + (math.clamp(CFG.smoothing / 100, 0.04, 1) - 0.04) * math.clamp((now - springStart) / 0.8, 0, 1)
+					moveMouse(dx * t, dy * t)
+				else
+					local t = math.clamp(CFG.smoothing / 100, 0.04, 1)
+					moveMouse(dx * t, dy * t)
+				end
+			end
+		elseif CFG.aimbotStyle ~= "Lock" then
+			currentLockPart = nil
+			springStart = 0
+		end
+	else
+		currentLockPart = nil
+		potentialTarget = nil
+		springStart = 0
+	end
+
+	if selfAlive() and featureOn(CFG.trigger, CFG.triggerMode, CFG.triggerHeld) then
+		trigParams.FilterDescendantsInstances = { char }
+		local ray = Camera:ViewportPointToRay(center.X, center.Y)
+		local hit = workspace:Raycast(ray.Origin, ray.Direction * 800, trigParams)
+		local okHit = false
+		if hit and hit.Instance then
+			local model = hit.Instance:FindFirstAncestorOfClass("Model")
+			local plr = model and Players:GetPlayerFromCharacter(model)
+			if plr and alive(plr) and not skipped(plr) and is35Visible(model) then
+				okHit = true
+			end
+		end
+		if okHit then
+			if triggerDetectTime == 0 then
+				triggerDetectTime = tick()
+			end
+			if (tick() - triggerDetectTime) * 1000 >= CFG.triggerDelay then
+				clickMouse()
+			end
+		else
+			triggerDetectTime = 0
+		end
+	else
+		triggerDetectTime = 0
+	end
+
+	local seen = {}
+	local espOn = HAS_DRAW and (CFG.espBox or CFG.espFill or CFG.espName or CFG.espDistance or CFG.espHealth)
+	local function asciiName(s)
+		if type(s) ~= "string" or s == "" then
+			return nil
+		end
+		for i = 1, #s do
+			local b = string.byte(s, i)
+			if b < 32 or b > 126 then
+				return nil
+			end
+		end
+		return s
+	end
+	if espOn then
+		local accent = THEME.accent.c
+		local font = THEME.font.c
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if not skipped(plr) and alive(plr) then
+				local c = plr.Character
+				local h = c:FindFirstChildOfClass("Humanoid")
+				local r = c:FindFirstChild("HumanoidRootPart")
+				local head = c:FindFirstChild("Head")
+				if not (CFG.healthCheck and h and h.Health < 0.1) and r then
+					seen[plr.UserId] = true
+					local p = ensurePool(plr.UserId)
+					local topPos = head and (head.Position + Vector3.new(0, 0.4, 0)) or (r.Position + Vector3.new(0, 2.6, 0))
+					local botPos = r.Position - Vector3.new(0, 3, 0)
+					local tv, onScreen = Camera:WorldToViewportPoint(topPos)
+					local bv = Camera:WorldToViewportPoint(botPos)
+					if onScreen and tv.Z > 0 then
+						local height = math.abs(tv.Y - bv.Y)
+						local width = height * 0.55
+						local x, y = tv.X - width / 2, tv.Y
+						if p.fill then
+							p.fill.Visible = CFG.espFill
+							if CFG.espFill then
+								p.fill.Position = Vector2.new(x, y)
+								p.fill.Size = Vector2.new(width, height)
+								p.fill.Color = accent
+							end
+						end
+						if p.box then
+							p.box.Visible = CFG.espBox and CFG.espType == "2D"
+							if p.box.Visible then
+								p.box.Position = Vector2.new(x, y)
+								p.box.Size = Vector2.new(width, height)
+								p.box.Color = accent
+							end
+						end
+						for _, o in ipairs(p.corners) do o.Visible = false end
+						if CFG.espBox and CFG.espType == "Corner" then
+							local L = math.clamp(width * 0.22, 5, 16)
+							local pts = {
+								{ Vector2.new(x, y), Vector2.new(x + L, y) },
+								{ Vector2.new(x, y), Vector2.new(x, y + L) },
+								{ Vector2.new(x + width, y), Vector2.new(x + width - L, y) },
+								{ Vector2.new(x + width, y), Vector2.new(x + width, y + L) },
+								{ Vector2.new(x, y + height), Vector2.new(x + L, y + height) },
+								{ Vector2.new(x, y + height), Vector2.new(x, y + height - L) },
+								{ Vector2.new(x + width, y + height), Vector2.new(x + width - L, y + height) },
+								{ Vector2.new(x + width, y + height), Vector2.new(x + width, y + height - L) },
+							}
+							for n, pair in ipairs(pts) do
+								line(p.corners[n], pair[1], pair[2], accent)
+							end
+						end
+						for _, o in ipairs(p.edges) do o.Visible = false end
+						if CFG.espBox and CFG.espType == "3D" then
+							local cf = r.CFrame
+							local s3 = Vector3.new(2, 3, 1.1)
+							local corners3, idx = {}, 1
+							for _, sx in ipairs({ -1, 1 }) do
+								for _, sy in ipairs({ -1, 1 }) do
+									for _, sz in ipairs({ -1, 1 }) do
+										corners3[idx] = (cf * CFrame.new(sx * s3.X, sy * s3.Y, sz * s3.Z)).Position
+										idx += 1
+									end
+								end
+							end
+							local function sp(i)
+								local vv = Camera:WorldToViewportPoint(corners3[i])
+								return Vector2.new(vv.X, vv.Y), vv.Z > 0
+							end
+							local pairsIdx = { { 1, 2 }, { 3, 4 }, { 5, 6 }, { 7, 8 }, { 1, 3 }, { 2, 4 }, { 5, 7 }, { 6, 8 }, { 1, 5 }, { 2, 6 }, { 3, 7 }, { 4, 8 } }
+							for n, pr in ipairs(pairsIdx) do
+								local a, oa = sp(pr[1])
+								local b, ob = sp(pr[2])
+								if oa and ob then
+									line(p.edges[n], a, b, accent)
+								end
+							end
+						end
+						if p.name then
+							p.name.Visible = CFG.espName
+							if CFG.espName then
+								local shown
+								if CFG.usernameSpoof and CFG.spoofEnemyName ~= "" then
+									shown = asciiName(CFG.spoofEnemyName)
+								elseif CFG.espNameMode == "Username" then
+									shown = asciiName(plr.Name)
+								else
+									shown = asciiName(plr.DisplayName) or asciiName(plr.Name)
+								end
+								p.name.Text = shown or "Player"
+								p.name.Position = Vector2.new(tv.X, y - 18)
+								p.name.Color = font
+							end
+						end
+						if p.dist and hrp then
+							p.dist.Visible = CFG.espDistance
+							if CFG.espDistance then
+								p.dist.Text = tostring(math.floor((r.Position - hrp.Position).Magnitude + 0.5)) .. "m"
+								p.dist.Position = Vector2.new(tv.X, y + height + 3)
+								p.dist.Color = font
+							end
+						end
+						if CFG.espHealth and h then
+							local ratio = math.clamp(h.Health / math.max(h.MaxHealth, 1), 0, 1)
+							if CFG.espHealthMode == "Bar" then
+								if p.hpBg then
+									p.hpBg.Visible = true
+									p.hpBg.Position = Vector2.new(x - 6, y)
+									p.hpBg.Size = Vector2.new(3, height)
+								end
+								if p.hp then
+									p.hp.Visible = true
+									p.hp.Size = Vector2.new(3, height * ratio)
+									p.hp.Position = Vector2.new(x - 6, y + height * (1 - ratio))
+								end
+								if p.hpTx then p.hpTx.Visible = false end
+							else
+								if p.hpTx then
+									p.hpTx.Visible = true
+									p.hpTx.Text = tostring(math.floor(h.Health))
+									p.hpTx.Position = Vector2.new(x + width + 5, y)
+									p.hpTx.Color = Color3.fromRGB(90, 220, 120)
+								end
+								if p.hpBg then p.hpBg.Visible = false end
+								if p.hp then p.hp.Visible = false end
+							end
+						else
+							if p.hpBg then p.hpBg.Visible = false end
+							if p.hp then p.hp.Visible = false end
+							if p.hpTx then p.hpTx.Visible = false end
+						end
+					else
+						hidePool(p)
+					end
+				end
+			end
+		end
+	end
+	for uid, p in pairs(pool) do
+		if not seen[uid] then
+			hidePool(p)
+		end
+	end
+end)
+
+local ghostModel, ghostHum, ghostWalk
+local ghostPos
+local ghostLook = Vector3.new(0, 0, -1)
+local ghostYVel = 0
+local ghostGrounded = true
+local ghostAirJumps = 0
+local ghostSpacePrev = false
+local ghosting = false
+local lastSafePos
+local ghostParams = RaycastParams.new()
+ghostParams.FilterType = Enum.RaycastFilterType.Exclude
+
+local function rageBodyActive()
+	return CFG.voidActive or CFG.orbitActive or CFG.translocate or CFG.evasionActive
+end
+
+local function hideRealBody(hidden)
+	if not char then
+		return
+	end
+	for _, d in ipairs(char:GetDescendants()) do
+		if d:IsA("BasePart") or d:IsA("Decal") or d:IsA("Texture") then
+			d.LocalTransparencyModifier = hidden and 1 or 0
+		end
+	end
+end
+
+function clearGhost(snapBack)
+	if snapBack and hrp and ghostPos then
+		local face = ghostLook.Magnitude > 0.1 and ghostLook.Unit or Vector3.new(0, 0, -1)
+		hrp.CFrame = CFrame.lookAt(ghostPos, ghostPos + face)
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+	end
+	hideRealBody(false)
+	if ghostWalk then
+		pcall(function()
+			ghostWalk:Stop()
+		end)
+		ghostWalk = nil
+	end
+	if ghostModel then
+		ghostModel:Destroy()
+		ghostModel = nil
+	end
+	ghostHum = nil
+	ghosting = false
+	ghostYVel = 0
+	ghostGrounded = true
+	ghostAirJumps = 0
+end
+
+local function buildGhost()
+	if ghostModel then
+		ghostModel:Destroy()
+		ghostModel = nil
+		ghostHum = nil
+	end
+	if ghostWalk then
+		pcall(function()
+			ghostWalk:Stop()
+		end)
+		ghostWalk = nil
+	end
+	if not char or not hrp then
+		return false
+	end
+	local clone
+	pcall(function()
+		local prev = char.Archivable
+		char.Archivable = true
+		clone = char:Clone()
+		char.Archivable = prev
+	end)
+	if not clone then
+		clone = Instance.new("Model")
+		for _, d in ipairs(char:GetDescendants()) do
+			if d:IsA("BasePart") or d:IsA("Shirt") or d:IsA("Pants") or d:IsA("ShirtGraphic") then
+				pcall(function()
+					local was = d.Archivable
+					d.Archivable = true
+					local copy = d:Clone()
+					d.Archivable = was
+					if copy then
+						if copy:IsA("BasePart") then
+							copy.Anchored = true
+							copy.CanCollide = false
+							copy.CanTouch = false
+							copy.CanQuery = false
+							copy.Massless = true
+						end
+						copy.Parent = clone
+					end
+				end)
+			end
+		end
+		local humCopy = Instance.new("Humanoid")
+		humCopy.Name = "Humanoid"
+		humCopy.Parent = clone
+	end
+	for _, d in ipairs(clone:GetDescendants()) do
+		if d:IsA("Script") or d:IsA("LocalScript") or d:IsA("ModuleScript") then
+			d:Destroy()
+		end
+	end
+	local ghum = clone:FindFirstChildOfClass("Humanoid")
+	local ghrp = clone:FindFirstChild("HumanoidRootPart")
+	if not ghum or not ghrp then
+		clone:Destroy()
+		return false
+	end
+	ghum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+	ghum.PlatformStand = true
+	pcall(function()
+		ghum.EvaluateStateMachine = false
+	end)
+	for _, p in ipairs(clone:GetDescendants()) do
+		if p:IsA("BasePart") then
+			p.Anchored = true
+			p.CanCollide = false
+			p.CanTouch = false
+			p.CanQuery = false
+			p.Massless = true
+		end
+	end
+	clone.PrimaryPart = ghrp
+	pcall(function()
+		clone.WorldPivot = ghrp.CFrame
+	end)
+	clone.Name = "KE_View"
+	clone.Parent = workspace
+	ghostModel = clone
+	ghostHum = ghum
+	local anim = Instance.new("Animation")
+	anim.AnimationId = "rbxassetid://507777826"
+	pcall(function()
+		local track = ghum:LoadAnimation(anim)
+		track.Looped = true
+		track.Priority = Enum.AnimationPriority.Movement
+		track:Play()
+		track:AdjustSpeed(0)
+		ghostWalk = track
+	end)
+	return true
+end
+
+local function stepGhost(dt)
+	dt = math.clamp(dt, 1 / 240, 1 / 20)
+	local cam = workspace.CurrentCamera
+	local look = cam and cam.CFrame.LookVector or ghostLook
+	local right = cam and cam.CFrame.RightVector or Vector3.new(1, 0, 0)
+	local flatLook = Vector3.new(look.X, 0, look.Z)
+	local flatRight = Vector3.new(right.X, 0, right.Z)
+	if flatLook.Magnitude > 0.05 then
+		flatLook = flatLook.Unit
+	else
+		flatLook = ghostLook
+	end
+	if flatRight.Magnitude > 0.05 then
+		flatRight = flatRight.Unit
+	else
+		flatRight = Vector3.new(1, 0, 0)
+	end
+	local wish = Vector3.zero
+	local md = hum and hum.MoveDirection or Vector3.zero
+	if md.Magnitude > 0.08 then
+		wish = Vector3.new(md.X, 0, md.Z)
+	else
+		if UserInputService:IsKeyDown(Enum.KeyCode.W) then wish += flatLook end
+		if UserInputService:IsKeyDown(Enum.KeyCode.S) then wish -= flatLook end
+		if UserInputService:IsKeyDown(Enum.KeyCode.A) then wish -= flatRight end
+		if UserInputService:IsKeyDown(Enum.KeyCode.D) then wish += flatRight end
+	end
+	local speed = 16
+	if CFG.speedwalk then
+		speed = CFG.speedValue
+	elseif hum and hum.WalkSpeed > 0 then
+		speed = hum.WalkSpeed
+	end
+	if slideHeld and CFG.slideMult > 1 then
+		speed = speed * CFG.slideMult
+	end
+	local horiz = Vector3.zero
+	if wish.Magnitude > 0.05 then
+		horiz = wish.Unit * speed
+		ghostLook = Vector3.new(horiz.X, 0, horiz.Z).Unit
+	end
+	local space = UserInputService:IsKeyDown(Enum.KeyCode.Space)
+	if CFG.flight then
+		local vy = 0
+		if space then vy = CFG.flightSpeed end
+		if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then vy = -CFG.flightSpeed end
+		ghostPos = ghostPos + Vector3.new(horiz.X, vy, horiz.Z) * dt
+		ghostYVel = 0
+		ghostGrounded = false
+	else
+		if space and not ghostSpacePrev then
+			if ghostGrounded then
+				ghostYVel = jumpVelocity() * math.max(CFG.doubleJumpMult, 1)
+				ghostGrounded = false
+				ghostAirJumps = 0
+			elseif CFG.infDoubleJump or CFG.doubleJumpMult > 1 then
+				ghostAirJumps += 1
+				ghostYVel = jumpVelocity() * CFG.doubleJumpMult
+			end
+		end
+		ghostYVel = math.max(-180, ghostYVel - workspace.Gravity * dt)
+		ghostParams.FilterDescendantsInstances = { char, ghostModel }
+		local nextPos = ghostPos + Vector3.new(horiz.X * dt, 0, horiz.Z * dt)
+		if horiz.Magnitude > 0 then
+			local wall = workspace:Raycast(ghostPos + Vector3.new(0, 1.5, 0), Vector3.new(horiz.X, 0, horiz.Z).Unit * (horiz.Magnitude * dt + 1.5), ghostParams)
+			if wall then
+				nextPos = Vector3.new(ghostPos.X, ghostPos.Y, ghostPos.Z)
+			end
+		end
+		nextPos = nextPos + Vector3.new(0, ghostYVel * dt, 0)
+		local stand = 3
+		if ghostHum and ghostModel then
+			local ghrp = ghostModel:FindFirstChild("HumanoidRootPart")
+			stand = (ghostHum.HipHeight or 2) + ((ghrp and ghrp.Size.Y or 2) * 0.5)
+		end
+		local floorHit = workspace:Raycast(Vector3.new(nextPos.X, math.max(ghostPos.Y, nextPos.Y) + 2, nextPos.Z), Vector3.new(0, -8 - math.abs(ghostYVel * dt), 0), ghostParams)
+		if floorHit and ghostYVel <= 0 and nextPos.Y <= floorHit.Position.Y + stand then
+			nextPos = Vector3.new(nextPos.X, floorHit.Position.Y + stand, nextPos.Z)
+			ghostYVel = 0
+			ghostGrounded = true
+			ghostAirJumps = 0
+		else
+			ghostGrounded = false
+		end
+		ghostPos = nextPos
+	end
+	ghostSpacePrev = space
+	if ghostModel then
+		local face = ghostLook.Magnitude > 0.1 and ghostLook.Unit or flatLook
+		ghostModel:PivotTo(CFrame.lookAt(ghostPos, ghostPos + face))
+		local head = ghostModel:FindFirstChild("Head")
+		if head and cam and (cam.CFrame.Position - head.Position).Magnitude < 1.4 then
+			head.LocalTransparencyModifier = 1
+		elseif head then
+			head.LocalTransparencyModifier = 0
+		end
+		local track = ghostWalk
+		if track then
+			pcall(function()
+				track:AdjustSpeed(horiz.Magnitude > 1 and math.clamp(speed / 16, 0.4, 2.4) or 0)
+			end)
+		end
+	end
+end
+
+RunService:BindToRenderStep("KE_GhostCam", Enum.RenderPriority.Last.Value + 100, function(dt)
+	if killed then
+		if ghosting then
+			clearGhost(false)
+		end
+		return
+	end
+	local cam = workspace.CurrentCamera
+	local want = CFG.rageSilent and rageBodyActive() and selfAlive() and hrp and cam
+	if want then
+		if ghosting and (not ghostModel or not ghostModel.Parent) then
+			ghosting = false
+		end
+		if not ghosting then
+			ghostPos = lastSafePos or hrp.Position
+			ghostLook = Vector3.new(cam.CFrame.LookVector.X, 0, cam.CFrame.LookVector.Z)
+			if ghostLook.Magnitude < 0.1 then
+				ghostLook = Vector3.new(0, 0, -1)
+			else
+				ghostLook = ghostLook.Unit
+			end
+			ghostYVel = 0
+			ghostGrounded = true
+			buildGhost()
+			ghosting = true
+		end
+		hideRealBody(true)
+		stepGhost(dt)
+		local delta = ghostPos - hrp.Position
+		if delta.Magnitude > 1 then
+			local camPos = cam.CFrame.Position
+			if (camPos - hrp.Position).Magnitude < (camPos - ghostPos).Magnitude then
+				local goal = cam.CFrame + delta
+				local old = cam.CFrame
+				local function shift(inst)
+					local ok, pivot = pcall(function()
+						return inst:GetPivot()
+					end)
+					if ok then
+						pcall(function()
+							inst:PivotTo(goal * old:ToObjectSpace(pivot))
+						end)
+					end
+				end
+				for _, child in ipairs(cam:GetChildren()) do
+					if child:IsA("Model") or child:IsA("BasePart") then
+						shift(child)
+					elseif child:IsA("Folder") then
+						for _, sub in ipairs(child:GetChildren()) do
+							if sub:IsA("Model") or sub:IsA("BasePart") then
+								shift(sub)
+							end
+						end
+					end
+				end
+				cam.CFrame = goal
+			end
+		end
+	else
+		if ghosting then
+			clearGhost(true)
+		elseif hrp and selfAlive() and not rageBodyActive() then
+			lastSafePos = hrp.Position
+		end
+	end
+end)
+
+local function setOpen(v)
+	uiOpen = v
+	if v then
+		shell.Visible = true
+		task.defer(syncCards)
+		task.delay(0.05, syncCards)
+		local ml = UserInputService:GetMouseLocation()
+		noteSidebarHover(ml)
+	else
+		closePicker()
+		closeDrop()
+		hoverSide = false
+		hoverGen += 1
+		setSidebar(false, true)
+		shell.Visible = false
+	end
+end
+
+on(UserInputService.InputBegan, function(input, gp)
+	if killed then
+		return
+	end
+	if listening then
+		return
+	end
+	if matchBind(input, PREFS.menuKey) and input.UserInputType == Enum.UserInputType.Keyboard then
+		setOpen(not uiOpen)
+		return
+	end
+	if isSlideKey(input) then
+		slideHeld = true
+		slideBase = nil
+	end
+	if gp then
+		return
+	end
+	if matchBind(input, CFG.aimbotBind) then
+		if CFG.aimbotMode == "Hold" then
+			CFG.aimbotHeld = true
+		elseif CFG.aimbotMode == "Toggle" then
+			CFG.aimbot = not CFG.aimbot
+			repaint()
+		end
+	end
+	if matchBind(input, CFG.triggerBind) then
+		if CFG.triggerMode == "Hold" then
+			CFG.triggerHeld = true
+		elseif CFG.triggerMode == "Toggle" then
+			CFG.trigger = not CFG.trigger
+			repaint()
+		end
+	end
+end)
+
+on(UserInputService.JumpRequest, function()
+	if killed or not selfAlive() or not hum or not hrp then
+		return
+	end
+	if hum.FloorMaterial ~= Enum.Material.Air then
+		airJumps = 0
+		return
+	end
+	airJumps += 1
+	local extra = airJumps > 1
+	if extra and not CFG.infDoubleJump then
+		return
+	end
+	if (not extra) and CFG.doubleJumpMult <= 1 then
+		return
+	end
+	local y = jumpVelocity() * CFG.doubleJumpMult
+	task.defer(function()
+		if not hrp or not selfAlive() then
+			return
+		end
+		local v = hrp.AssemblyLinearVelocity
+		hrp.AssemblyLinearVelocity = Vector3.new(v.X, y, v.Z)
+	end)
+end)
+
+on(UserInputService.InputEnded, function(input)
+	if matchBind(input, CFG.aimbotBind) then
+		CFG.aimbotHeld = false
+	end
+	if matchBind(input, CFG.triggerBind) then
+		CFG.triggerHeld = false
+	end
+	if isSlideKey(input) then
+		slideHeld = false
+		slideBase = nil
+	end
+end)
+
+local lockCamType = nil
+local function shiftCamModels(cam, newCF)
+	local old = cam.CFrame
+	local function shift(inst)
+		local ok, pivot = pcall(function()
+			return inst:GetPivot()
+		end)
+		if not ok then
+			return
+		end
+		local rel = old:ToObjectSpace(pivot)
+		pcall(function()
+			inst:PivotTo(newCF * rel)
+		end)
+	end
+	for _, child in ipairs(cam:GetChildren()) do
+		if child:IsA("Model") then
+			shift(child)
+		elseif child:IsA("Folder") then
+			for _, sub in ipairs(child:GetChildren()) do
+				if sub:IsA("Model") then
+					shift(sub)
+				end
+			end
+		end
+	end
+end
+RunService:BindToRenderStep("KE_AimLock", Enum.RenderPriority.Last.Value, function()
+	local cam = workspace.CurrentCamera
+	local part = currentLockPart
+	local locking = (not killed) and (not ghosting) and CFG.aimbotStyle == "Lock" and selfAlive() and featureOn(CFG.aimbot, CFG.aimbotMode, CFG.aimbotHeld) and cam and part and part.Parent
+	if lockCamType and cam and cam.CameraType == Enum.CameraType.Scriptable then
+		pcall(function()
+			cam.CameraType = lockCamType
+		end)
+		lockCamType = nil
+	end
+	if not locking then
+		return
+	end
+	local origin = cam.CFrame.Position
+	local goal = CFrame.new(origin, part.Position)
+	shiftCamModels(cam, goal)
+	cam.CFrame = goal
+end)
+
+task.spawn(function()
+	while not killed do
+		if CFG.usernameSpoof then
+			applySpoof()
+		end
+		task.wait(0.2)
+	end
+end)
+
+RunService:BindToRenderStep("KE_Emote", Enum.RenderPriority.Last.Value, function()
+	if killed or not selfAlive() then
+		return
+	end
+	keepEmote()
+end)
+
+task.spawn(function()
+	while not killed do
+		refreshActive()
+		if not selfAlive() and emoteTrack then
+			stopAnim()
+		end
+		task.wait(0.35)
+	end
+end)
+
+local listQueued = false
+local function queueLists()
+	spoofScanAt = 0
+	if listQueued then
+		return
+	end
+	listQueued = true
+	task.delay(0.3, function()
+		listQueued = false
+		if killed then
+			return
+		end
+		if currentPage == "Ragebot" and rebuildPriority then
+			pcall(rebuildPriority)
+		elseif currentPage == "Whitelist" and rebuildWhitelist then
+			pcall(rebuildWhitelist)
+		end
+	end)
+end
+
+on(Players.PlayerAdded, queueLists)
+
+on(Players.PlayerRemoving, function(plr)
+	if CFG.priorityUserId == plr.UserId then
+		CFG.priorityUserId = nil
+	end
+	queueLists()
+end)
+
+end
+startRuntime()
+
+notify("Kicia Enhancements", "Loaded. Menu is hidden. Press " .. prettyKey(PREFS.menuKey) .. ".", "accent")
