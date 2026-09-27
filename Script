@@ -158,6 +158,16 @@ local CFG = {
 	customAnimEnabled = false,
 	customAnimName = "Bodybuilder",
 	animSpeed = 1,
+	voidBind = "None",
+	orbitBind = "None",
+	translocateBind = "None",
+	evasionBind = "None",
+	noclipBind = "None",
+	speedBind = "None",
+	flightBind = "None",
+	infJumpBind = "None",
+	antiAimBind = "None",
+	animBind = "None",
 	doubleJumpMult = 1,
 	slideMult = 1,
 	infDoubleJump = false,
@@ -2873,36 +2883,30 @@ refreshActive = function()
 		return
 	end
 	local lines = {}
-	if not selfAlive() then
-		lines[1] = "Inactive until respawn"
-		if CFG.usernameSpoof then
-			lines[#lines + 1] = "Username Spoof"
+	local function add(on, bind, label)
+		if not on then
+			return
 		end
-	else
-		if featureOn(CFG.aimbot, CFG.aimbotMode, CFG.aimbotHeld) then
-			lines[#lines + 1] = string.format("[%s] Aimbot (%s)", prettyKey(CFG.aimbotBind), CFG.aimbotMode)
+		if bind and bind ~= "" and bind ~= "None" then
+			lines[#lines + 1] = string.format("[%s] %s", prettyKey(bind), label)
+		else
+			lines[#lines + 1] = label
 		end
-		if featureOn(CFG.trigger, CFG.triggerMode, CFG.triggerHeld) then
-			lines[#lines + 1] = string.format("[%s] Triggerbot (%s)", prettyKey(CFG.triggerBind), CFG.triggerMode)
-		end
-		if CFG.voidActive then lines[#lines + 1] = "Void Spam" end
-		if CFG.orbitActive then lines[#lines + 1] = "Player Orbit" end
-		if CFG.translocate then lines[#lines + 1] = "Translocate" end
-		if CFG.evasionActive then lines[#lines + 1] = "Evasion" end
-		if CFG.rageSilent then lines[#lines + 1] = "Silent Rage" end
-		if CFG.noclip then lines[#lines + 1] = "Noclip" end
-		if CFG.speedwalk then lines[#lines + 1] = "Speedwalk" end
-		if CFG.flight then lines[#lines + 1] = "Flight" end
-		if CFG.antiAim then lines[#lines + 1] = "Anti Aim" end
-		if CFG.worldEnabled then lines[#lines + 1] = "World" end
-		if CFG.infDoubleJump then lines[#lines + 1] = "Infinite Double Jump" end
-		if CFG.doubleJumpMult > 1 then lines[#lines + 1] = string.format("Double Jump %.2gx", CFG.doubleJumpMult) end
-		if CFG.slideMult > 1 then lines[#lines + 1] = string.format("Slide %.2gx", CFG.slideMult) end
-		if CFG.customAnimEnabled then lines[#lines + 1] = "Emote: " .. CFG.customAnimName end
-		if CFG.usernameSpoof then lines[#lines + 1] = "Username Spoof" end
-		if #lines == 0 then
-			lines[1] = "None active"
-		end
+	end
+	add(featureOn(CFG.aimbot, CFG.aimbotMode, CFG.aimbotHeld), CFG.aimbotBind, "Aimbot")
+	add(featureOn(CFG.trigger, CFG.triggerMode, CFG.triggerHeld), CFG.triggerBind, "Triggerbot")
+	add(CFG.voidActive, CFG.voidBind, "Void Spam")
+	add(CFG.orbitActive, CFG.orbitBind, "Player Orbit")
+	add(CFG.translocate, CFG.translocateBind, "Translocate")
+	add(CFG.evasionActive, CFG.evasionBind, "Evasion")
+	add(CFG.noclip, CFG.noclipBind, "Noclip")
+	add(CFG.speedwalk, CFG.speedBind, "Speedwalk")
+	add(CFG.flight, CFG.flightBind, "Flight")
+	add(CFG.infDoubleJump, CFG.infJumpBind, "Infinite Double Jump")
+	add(CFG.antiAim, CFG.antiAimBind, "Anti Aim")
+	add(CFG.customAnimEnabled, CFG.animBind, CFG.customAnimEnabled and ("Custom Animation: " .. CFG.customAnimName) or "Custom Animation")
+	if #lines == 0 then
+		lines[1] = "None active"
 	end
 	local sig = table.concat(lines, "|")
 	if sig == activeSig then
@@ -4175,6 +4179,7 @@ local function buildRagePage()
 
 	local void, ov = card(sc, ord, "Void Spam")
 	makeToggle(void, ov, "Enabled", function() return CFG.voidActive end, function(v) CFG.voidActive = v end)
+	makeBind(void, ov, "Bind", function() return CFG.voidBind end, function(v) CFG.voidBind = v end)
 	makeSlider(void, ov, "Min Range", 1000, 20000, function() return CFG.voidMinRange end, function(v) CFG.voidMinRange = v end, "")
 	makeSlider(void, ov, "Max Range", 1000, 20000, function() return CFG.voidMaxRange end, function(v) CFG.voidMaxRange = v end, "")
 	makeSlider(void, ov, "Hide Time", 0.1, 3, function() return CFG.voidHideTime end, function(v) CFG.voidHideTime = v end, "s")
@@ -4182,6 +4187,7 @@ local function buildRagePage()
 	local orbit, oo = card(sc, ord, "Player Orbit")
 	hint(orbit, oo, "Uses priority.")
 	makeToggle(orbit, oo, "Enabled", function() return CFG.orbitActive end, function(v) CFG.orbitActive = v end)
+	makeBind(orbit, oo, "Bind", function() return CFG.orbitBind end, function(v) CFG.orbitBind = v end)
 	makeSlider(orbit, oo, "Speed", 0.1, 5, function() return CFG.orbitSpeed end, function(v) CFG.orbitSpeed = v end, "")
 	makeSlider(orbit, oo, "Distance", 1, 20, function() return CFG.orbitDist end, function(v) CFG.orbitDist = v end, "")
 	makeSlider(orbit, oo, "Min Height", 0, 30, function() return CFG.orbitMinY end, function(v) CFG.orbitMinY = v end, "")
@@ -4198,6 +4204,7 @@ local function buildRagePage()
 			repaint()
 		end
 	end)
+	makeBind(trans, ot, "Bind", function() return CFG.translocateBind end, function(v) CFG.translocateBind = v end)
 	makeSlider(trans, ot, "Depth", 2, 30, function() return CFG.translocateDepth end, function(v) CFG.translocateDepth = v end, "")
 	makeSlider(trans, ot, "Above Time", 0.1, 3, function() return CFG.orbitAboveTime end, function(v) CFG.orbitAboveTime = v end, "s")
 	makeSlider(trans, ot, "Under Time", 0.1, 3, function() return CFG.translocateUnderTime end, function(v) CFG.translocateUnderTime = v end, "s")
@@ -4205,6 +4212,7 @@ local function buildRagePage()
 
 	local evade, oe = card(sc, ord, "Evasion")
 	makeToggle(evade, oe, "Enabled", function() return CFG.evasionActive end, function(v) CFG.evasionActive = v end)
+	makeBind(evade, oe, "Bind", function() return CFG.evasionBind end, function(v) CFG.evasionBind = v end)
 	makeSlider(evade, oe, "Min Distance", 10, 500, function() return CFG.evasionMinDist end, function(v) CFG.evasionMinDist = v end, "")
 	makeSlider(evade, oe, "Max Distance", 10, 500, function() return CFG.evasionMaxDist end, function(v) CFG.evasionMaxDist = v end, "")
 end
@@ -4235,6 +4243,7 @@ local function buildPlayerPage()
 		CFG.noclip = v
 		applyNoclip(v)
 	end)
+	makeBind(move, o, "Noclip Bind", function() return CFG.noclipBind end, function(v) CFG.noclipBind = v end)
 	makeToggle(move, o, "Speedwalk", function() return CFG.speedwalk end, function(v)
 		if v and not CFG.speedwalk and hum then
 			baseSpeed = hum.WalkSpeed > 0 and hum.WalkSpeed or 16
@@ -4244,6 +4253,7 @@ local function buildPlayerPage()
 			hum.WalkSpeed = v and CFG.speedValue or baseSpeed
 		end
 	end)
+	makeBind(move, o, "Speedwalk Bind", function() return CFG.speedBind end, function(v) CFG.speedBind = v end)
 	makeSlider(move, o, "Walk Speed", 16, 200, function() return CFG.speedValue end, function(v)
 		CFG.speedValue = v
 		if CFG.speedwalk and hum then
@@ -4251,13 +4261,24 @@ local function buildPlayerPage()
 		end
 	end, "")
 	makeToggle(move, o, "Flight", function() return CFG.flight end, function(v) CFG.flight = v end)
+	makeBind(move, o, "Flight Bind", function() return CFG.flightBind end, function(v) CFG.flightBind = v end)
 	makeSlider(move, o, "Flight Speed", 10, 300, function() return CFG.flightSpeed end, function(v) CFG.flightSpeed = v end, "")
 	makeToggle(move, o, "Infinite Double Jump", function() return CFG.infDoubleJump end, function(v) CFG.infDoubleJump = v end)
+	makeBind(move, o, "Infinite Jump Bind", function() return CFG.infJumpBind end, function(v) CFG.infJumpBind = v end)
 	makeSlider(move, o, "Double Jump", 1, 10, function() return CFG.doubleJumpMult end, function(v) CFG.doubleJumpMult = v end, "x", 0.25)
 	makeSlider(move, o, "Slide Speed", 1, 10, function() return CFG.slideMult end, function(v) CFG.slideMult = v end, "x", 0.25)
 
 	local aa, oa = card(sc, ord, "Anti Aim")
+	local broken = textOf(aa, "BROKEN", "warning", 12, true)
+	broken.LayoutOrder = oa()
+	broken.Size = UDim2.new(1, 0, 0, 16)
+	broken.ZIndex = 56
+	local note = hint(aa, oa, "When enabled, will kill you. Working a fix...")
+	note.TextWrapped = true
+	note.TextTruncate = Enum.TextTruncate.None
+	note.Size = UDim2.new(1, 0, 0, 28)
 	makeToggle(aa, oa, "Enabled", function() return CFG.antiAim end, function(v) CFG.antiAim = v end)
+	makeBind(aa, oa, "Bind", function() return CFG.antiAimBind end, function(v) CFG.antiAimBind = v end)
 
 	local em, oe = card(sc, ord, "Custom Animation")
 		makeCycle(em, oe, "Animation", EMOTE_NAMES, function() return CFG.customAnimName end, function(v)
@@ -4274,6 +4295,7 @@ local function buildPlayerPage()
 			end)
 		end
 	end, "x", 0.25)
+	makeBind(em, oe, "Bind", function() return CFG.animBind end, function(v) CFG.animBind = v end)
 	buttonRow(em, oe, {
 		{ "Play Animation", "success", function()
 			CFG.customAnimEnabled = true
@@ -4373,6 +4395,16 @@ local function buildKeybindsPage()
 	end)
 	makeBind(kb, o, "Aimbot", function() return CFG.aimbotBind end, function(v) CFG.aimbotBind = v end)
 	makeBind(kb, o, "Triggerbot", function() return CFG.triggerBind end, function(v) CFG.triggerBind = v end)
+	makeBind(kb, o, "Void Spam", function() return CFG.voidBind end, function(v) CFG.voidBind = v end)
+	makeBind(kb, o, "Player Orbit", function() return CFG.orbitBind end, function(v) CFG.orbitBind = v end)
+	makeBind(kb, o, "Translocate", function() return CFG.translocateBind end, function(v) CFG.translocateBind = v end)
+	makeBind(kb, o, "Evasion", function() return CFG.evasionBind end, function(v) CFG.evasionBind = v end)
+	makeBind(kb, o, "Noclip", function() return CFG.noclipBind end, function(v) CFG.noclipBind = v end)
+	makeBind(kb, o, "Speedwalk", function() return CFG.speedBind end, function(v) CFG.speedBind = v end)
+	makeBind(kb, o, "Flight", function() return CFG.flightBind end, function(v) CFG.flightBind = v end)
+	makeBind(kb, o, "Infinite Double Jump", function() return CFG.infJumpBind end, function(v) CFG.infJumpBind = v end)
+	makeBind(kb, o, "Anti Aim", function() return CFG.antiAimBind end, function(v) CFG.antiAimBind = v end)
+	makeBind(kb, o, "Custom Animation", function() return CFG.animBind end, function(v) CFG.animBind = v end)
 end
 
 local function buildWhitelistPage()
@@ -5914,6 +5946,65 @@ on(UserInputService.InputBegan, function(input, gp)
 			repaint()
 		end
 	end
+	local function flip(bind, apply)
+		if matchBind(input, bind) then
+			apply()
+			repaint()
+			refreshActive()
+		end
+	end
+	flip(CFG.voidBind, function()
+		CFG.voidActive = not CFG.voidActive
+	end)
+	flip(CFG.orbitBind, function()
+		CFG.orbitActive = not CFG.orbitActive
+	end)
+	flip(CFG.translocateBind, function()
+		CFG.translocate = not CFG.translocate
+		if CFG.translocate then
+			CFG.noclip = true
+			applyNoclip(true)
+		end
+	end)
+	flip(CFG.evasionBind, function()
+		CFG.evasionActive = not CFG.evasionActive
+	end)
+	flip(CFG.noclipBind, function()
+		if not CFG.noclip and CFG.translocate then
+			return
+		end
+		if CFG.noclip and CFG.translocate then
+			return
+		end
+		CFG.noclip = not CFG.noclip
+		applyNoclip(CFG.noclip)
+	end)
+	flip(CFG.speedBind, function()
+		if not CFG.speedwalk and hum then
+			baseSpeed = hum.WalkSpeed > 0 and hum.WalkSpeed or 16
+		end
+		CFG.speedwalk = not CFG.speedwalk
+		if hum then
+			hum.WalkSpeed = CFG.speedwalk and CFG.speedValue or baseSpeed
+		end
+	end)
+	flip(CFG.flightBind, function()
+		CFG.flight = not CFG.flight
+	end)
+	flip(CFG.infJumpBind, function()
+		CFG.infDoubleJump = not CFG.infDoubleJump
+	end)
+	flip(CFG.antiAimBind, function()
+		CFG.antiAim = not CFG.antiAim
+	end)
+	flip(CFG.animBind, function()
+		CFG.customAnimEnabled = not CFG.customAnimEnabled
+		if CFG.customAnimEnabled then
+			playSelectedAnim()
+		else
+			stopAnim()
+		end
+	end)
 end)
 
 on(UserInputService.JumpRequest, function()
@@ -6019,11 +6110,15 @@ end)
 
 task.spawn(function()
 	while not killed do
-		refreshActive()
 		if not selfAlive() and emoteTrack then
 			stopAnim()
 		end
 		task.wait(0.35)
+	end
+end)
+on(RunService.Heartbeat, function()
+	if not killed then
+		refreshActive()
 	end
 end)
 
