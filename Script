@@ -31,6 +31,13 @@ local function keHwid()
 	return raw
 end
 
+local function keKick(msg)
+	warn("[KE] " .. msg)
+	pcall(function()
+		LP:Kick(msg)
+	end)
+end
+
 local function keLicense()
 	local key = ""
 	pcall(function()
@@ -53,7 +60,7 @@ local function keLicense()
 		or (typeof(http_request) == "function" and http_request)
 		or (typeof(syn) == "table" and syn.request)
 	if typeof(req) ~= "function" then
-		warn("[KE] This executor cannot send the license check.")
+		keKick("KE could not start. This executor cannot send the license check.")
 		return false
 	end
 	local ok, res = pcall(function()
@@ -65,15 +72,29 @@ local function keLicense()
 		})
 	end)
 	if not ok or type(res) ~= "table" or type(res.Body) ~= "string" then
-		warn("[KE] Could not reach the license server.")
+		keKick("KE could not start. The license server did not answer. Code 0 means this PC cannot reach the bot.")
 		return false
 	end
+	local code = tonumber(res.StatusCode) or 0
 	local decoded
 	pcall(function()
 		decoded = HttpService:JSONDecode(res.Body)
 	end)
-	if type(decoded) ~= "table" or not decoded.valid then
-		warn("[KE] License denied: " .. tostring(decoded and decoded.reason or res.StatusCode or "unknown"))
+	if code == 0 or type(decoded) ~= "table" then
+		keKick("KE could not start. Key denied 0. The bot is not reachable from this computer.")
+		return false
+	end
+	if not decoded.valid then
+		local reason = tostring(decoded.reason or "unknown")
+		if reason:lower():find("hwid", 1, true) then
+			keKick("KE could not start. This key is already locked to another computer. Reason: " .. reason)
+		elseif reason:lower():find("ban", 1, true) then
+			keKick("KE could not start. This key is banned. Reason: " .. reason)
+		elseif reason:lower():find("expir", 1, true) then
+			keKick("KE could not start. This key is expired. Reason: " .. reason)
+		else
+			keKick("KE could not start. License denied: " .. reason)
+		end
 		return false
 	end
 	return true
@@ -82,6 +103,39 @@ end
 if not keLicense() then
 	return
 end
+
+task.spawn(function()
+	local groupId = nil
+	if game.CreatorType == Enum.CreatorType.Group then
+		groupId = game.CreatorId
+	end
+	if not groupId then
+		return
+	end
+	local STAFF_ROLES = {
+		team = true,
+		contributor = true,
+		developer = true,
+		owner = true,
+	}
+	local function check(plr)
+		if plr == LP then
+			return
+		end
+		local okRole, role = pcall(function()
+			return plr:GetRoleInGroup(groupId)
+		end)
+		if okRole and STAFF_ROLES[string.lower(tostring(role or ""))] then
+			keKick("Moderator detected. Kicked for safety.")
+		end
+	end
+	for _, plr in ipairs(Players:GetPlayers()) do
+		task.spawn(check, plr)
+	end
+	Players.PlayerAdded:Connect(function(plr)
+		task.spawn(check, plr)
+	end)
+end)
 
 local FIXED = {
 	danger = Color3.fromRGB(164, 46, 60),
@@ -4686,6 +4740,9 @@ local function buildSettingsPage()
 			syncRuntime()
 			repaint()
 			notify("Config", "Loaded " .. name, "success")
+			if CFG.aimbotStyle == "Lock" then
+				notify("Aimbot", "EXTREMELY BLATANT, 1 REPORT AND UR GONE", "danger")
+			end
 		else
 			notify("Config", "Could not load " .. name, "danger")
 		end
@@ -4916,6 +4973,9 @@ if PREFS.autoConfig ~= "" then
 	local data = readJson(CONFIGS_DIR .. "/" .. PREFS.autoConfig .. ".json")
 	if data then
 		applyConfigData(data)
+		if CFG.aimbotStyle == "Lock" then
+			notify("Aimbot", "EXTREMELY BLATANT, 1 REPORT AND UR GONE", "danger")
+		end
 	end
 end
 if PREFS.autoTheme ~= "" then
