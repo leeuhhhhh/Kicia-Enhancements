@@ -186,6 +186,7 @@ local PREFS = {
 	uiItalic = false,
 	uiSize = 13,
 	discordPrompted = false,
+	bundledSeeded = false,
 }
 
 local SKIP_CFG = {
@@ -338,6 +339,7 @@ local function savePreferences()
 		uiItalic = PREFS.uiItalic,
 		uiSize = PREFS.uiSize,
 		discordPrompted = PREFS.discordPrompted == true,
+		bundledSeeded = PREFS.bundledSeeded == true,
 	})
 end
 
@@ -379,6 +381,9 @@ local function loadPreferences()
 	end
 	if data.discordPrompted == true then
 		PREFS.discordPrompted = true
+	end
+	if data.bundledSeeded == true then
+		PREFS.bundledSeeded = true
 	end
 end
 
@@ -4747,6 +4752,56 @@ if rebuildWhitelist then
 end
 
 loadPreferences()
+
+local function fileExists(path)
+	if isfile then
+		local ok, res = pcall(isfile, path)
+		if ok then
+			return res == true
+		end
+	end
+	local ok = pcall(readfile, path)
+	return ok
+end
+
+local function seedBundled()
+	if PREFS.bundledSeeded then
+		return
+	end
+	PREFS.bundledSeeded = true
+	local function put(dir, name, body)
+		local path = dir .. "/" .. name .. ".json"
+		if fileExists(path) then
+			return
+		end
+		pcall(writefile, path, body)
+	end
+	put(CONFIGS_DIR, "[COMMUNITY] Closet", [[{"cfg":{"usernameSpoof":false,"fovRadius":35,"spoofEnemyName":"","espDistance":false,"antiAim":false,"fovOn":true,"visibleCheck":true,"voidMinRange":8000,"customAnimEnabled":false,"aimbotStyle":"Linear","translocate":false,"speedwalk":false,"rageSilent":false,"espType":"2D","aimbotMode":"Hold","trigger":false,"triggerMode":"Toggle","orbitMinY":10,"spoofSelfName":"","evasionMinDist":80,"infDoubleJump":false,"espFill":false,"translocateUnderTime":0.5,"switchDelay":0,"orbitAboveTime":0.5,"orbitActive":false,"voidHideTime":1,"espName":true,"triggerBind":"V","slideMult":1,"translocateDepth":3,"flightSpeed":50,"aimbotBind":"MouseButton1","orbitDist":2,"transVoidHideTime":1,"aimPoint":"Head","evasionActive":false,"voidMaxRange":10000,"healthCheck":true,"espHealthMode":"Text","doubleJumpMult":1,"orbitShowTime":0.5,"evasionMaxDist":280,"voidActive":false,"ignoreDistance":0,"orbitMaxY":10,"espNameMode":"Display","orbitSpeed":1,"flight":false,"espBox":true,"smoothing":35,"speedValue":32,"animSpeed":1,"triggerDelay":40,"espHealth":true,"teamCheck":true,"noclip":false,"customAnimName":"Bodybuilder","aimbot":true},"version":2,"whitelist":[]}]])
+	put(CONFIGS_DIR, "[COMMUNITY] Rage", [[{"cfg":{"usernameSpoof":false,"fovRadius":800,"spoofEnemyName":"RealDogsGoMeow","espDistance":false,"antiAim":false,"fovOn":true,"visibleCheck":false,"voidMinRange":20000,"customAnimEnabled":false,"aimbotStyle":"Lock","translocate":false,"speedwalk":false,"rageSilent":true,"espType":"2D","aimbotMode":"Hold","trigger":false,"triggerMode":"Hold","orbitMinY":20,"spoofSelfName":"RealCatsGoWoof","evasionMinDist":500,"infDoubleJump":false,"espFill":false,"translocateUnderTime":0.5,"switchDelay":0,"orbitAboveTime":0.5,"orbitActive":true,"voidHideTime":0.2,"espName":true,"triggerBind":"Z","slideMult":1,"translocateDepth":3,"flightSpeed":50,"aimbotBind":"MouseButton2","orbitDist":2,"transVoidHideTime":1,"aimPoint":"Head","evasionActive":false,"voidMaxRange":20000,"healthCheck":true,"espHealthMode":"Text","doubleJumpMult":1,"orbitShowTime":0.5,"evasionMaxDist":500,"voidActive":true,"ignoreDistance":0,"orbitMaxY":20,"espNameMode":"Display","orbitSpeed":1,"flight":false,"espBox":true,"smoothing":100,"speedValue":32,"animSpeed":1,"triggerDelay":0,"espHealth":true,"teamCheck":true,"noclip":false,"customAnimName":"Bodybuilder","aimbot":true},"version":2,"whitelist":[]}]])
+	local function C(r, g, b, t)
+		return string.format('{"R":%.5f,"G":%.5f,"B":%.5f,"T":%.3f}', r / 255, g / 255, b / 255, t or 0)
+	end
+	local function theme(bg, main, outline, font, accent)
+		return string.format('{"background":%s,"main":%s,"outline":%s,"font":%s,"accent":%s}', bg, main, outline, font, accent)
+	end
+	local themes = {
+		{ "KE", theme(C(8, 8, 10), C(18, 16, 22), C(232, 140, 188), C(236, 232, 238), C(232, 120, 176)) },
+		{ "Closet", theme(C(12, 10, 14), C(28, 22, 30), C(168, 120, 150), C(230, 220, 226), C(196, 130, 168)) },
+		{ "Rage", theme(C(8, 6, 6), C(22, 12, 12), C(180, 40, 40), C(240, 230, 230), C(220, 48, 48)) },
+		{ "Midnight", theme(C(6, 8, 14), C(14, 18, 32), C(90, 130, 210), C(226, 232, 242), C(96, 150, 255)) },
+		{ "Toxic", theme(C(6, 10, 7), C(12, 22, 14), C(70, 180, 80), C(226, 240, 228), C(90, 220, 100)) },
+		{ "Ice", theme(C(7, 10, 12), C(14, 22, 28), C(120, 190, 210), C(230, 240, 244), C(140, 220, 235)) },
+		{ "Amber", theme(C(12, 9, 5), C(28, 20, 10), C(210, 150, 50), C(242, 232, 214), C(240, 170, 50)) },
+		{ "Mono", theme(C(10, 10, 10), C(22, 22, 22), C(180, 180, 180), C(236, 236, 236), C(220, 220, 220)) },
+		{ "Violet", theme(C(8, 6, 14), C(18, 14, 32), C(140, 90, 220), C(234, 228, 244), C(168, 110, 255)) },
+		{ "Blood", theme(C(10, 4, 4), C(24, 8, 8), C(140, 20, 28), C(240, 220, 220), C(190, 24, 36)) },
+	}
+	for _, item in ipairs(themes) do
+		put(THEMES_DIR, "[COMMUNITY] " .. item[1], item[2])
+	end
+	savePreferences()
+end
+seedBundled()
 selectedConfig = PREFS.autoConfig or ""
 selectedTheme = PREFS.autoTheme or ""
 watermark.Visible = PREFS.watermark
@@ -5938,3 +5993,4 @@ startRuntime()
 notify("Kicia Enhancements", "Loaded. Menu is hidden. Press " .. prettyKey(PREFS.menuKey) .. ".", "accent")
 print("hi lol :)")
 print("enjoy ke!")
+print("join our discord server")
