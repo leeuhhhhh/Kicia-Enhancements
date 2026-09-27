@@ -11,7 +11,7 @@ local Lighting = game:GetService("Lighting")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
-local LICENSE_API = "http://127.0.0.1:5000/check"
+local LICENSE_API = "https://tribe-llc-leaves-starring.trycloudflare.com/check"
 
 local function keHwid()
 	local raw = ""
